@@ -1,30 +1,30 @@
 
 # INFO --------------------------------------------------------------------
 
-# 1 - Checking available deployments 
-# - accessing all studies and filter those: 
-# 1 - have registered deployments
-# 2 - that deploy sensors of interest
-# 3 - with download access
-# 4 - not a test deployments
-# >>> saved as downloadable_studies.csv
-# 
-# - download all the available deployment information from studies of interest
-#     done like this because in study info sometimes there is no species info
-# - if download failed keep the error info
-# >>> saved as downloadable_studies_deployments.csv
-# 
-# - filtering deployments that include: 
-# 1 - species of interest
-# 2 - sensor type of interest
-# 3 - no manipulation with the tracked animal
-# >>> saved as downloadable_studies_deployments_filtered.csv
-# 
-# 2 - Downloading deployments of interest 
-# - download the tracking data by specifying: individual_local_identifier, 
-#     sensor_type_id, and study_id from before
-# - keep track of errors
-# >>> dowload report saved
+#' 1 - Checking available deployments 
+- accessing all studies and filter those:
+1 - have registered deployments
+2 - that deploy sensors of interest
+3 - with download access
+4 - not a test deployments
+>>> saved as downloadable_studies.csv
+
+- download all the available deployment information from studies of interest
+    done like this because in study info sometimes there is no species info
+- if download failed keep the error info
+>>> saved as downloadable_studies_deployments.csv
+
+- filtering deployments that include:
+1 - species of interest
+2 - sensor type of interest
+3 - no manipulation with the tracked animal
+>>> saved as downloadable_studies_deployments_filtered.csv
+
+2 - Downloading deployments of interest
+- download the tracking data by specifying: individual_local_identifier,
+    sensor_type_id, and study_id from before
+- keep track of errors
+>>> dowload report saved
 
 # 0 - Defining parameters of interest -------------------------------------
 
@@ -81,11 +81,24 @@ col_study <- c(
 # options("move2_movebank_key_name" = "movebank")
 # for downlaoding pigeon study: 
 # ID 897179972Ornitela_Pigeon_Columba livia_Spiegel_Israel 
+# another account with Aiguamolls data 
+# 
+# for checking all the accounts:
+# keyring::key_list()
+#           service        username
+# 1        movebank    TeamWikelski
+# 2   rbook_account           RBook
+# 3 kosmickizaborav Kosmickizaborav
 
 movebank_access <- list(
   main = "movebank", 
-  sub1 = "rbook_account"
+  sub1 = "rbook_account", 
+  sub2 = "kosmickizaborav"
 )
+
+if(!dir.exists(here("Data"))){
+  dir.create(here("Data"))
+}
 
 
 # 1 - Checking available deployments --------------------------------------
