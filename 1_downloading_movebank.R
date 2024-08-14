@@ -1,30 +1,37 @@
+#' ---
+#' title: "Downloading Movebank data"
+#' output: github_document
+#' ---
 
 # INFO --------------------------------------------------------------------
 
-#' 1 - Checking available deployments 
-- accessing all studies and filter those:
-1 - have registered deployments
-2 - that deploy sensors of interest
-3 - with download access
-4 - not a test deployments
->>> saved as downloadable_studies.csv
-
-- download all the available deployment information from studies of interest
-    done like this because in study info sometimes there is no species info
-- if download failed keep the error info
->>> saved as downloadable_studies_deployments.csv
-
-- filtering deployments that include:
-1 - species of interest
-2 - sensor type of interest
-3 - no manipulation with the tracked animal
->>> saved as downloadable_studies_deployments_filtered.csv
-
-2 - Downloading deployments of interest
-- download the tracking data by specifying: individual_local_identifier,
-    sensor_type_id, and study_id from before
-- keep track of errors
->>> dowload report saved
+#' **SECTION 1 - Checking available deployments** 
+#' 
+#' **1.1. Accessing downloadable studies**
+#' accessing all studies from different accounts and filter studies that:
+#' 1 - have registered deployments
+#' 2 - that deploy sensors of interest
+#' 3 - with download access
+#' 4 - not test deployments
+#' >>> OUTPUT: downloadable_studies.csv
+#' 
+#' **1.2. Downloading deployment info**
+#' download deployment information from studies of interest. 
+#' done in this way because in study info sometimes there is no species specified.
+#' if download failed keep the error info
+#' >>> OUTPUT: downloadable_studies_deployments.csv
+# 
+#' - filtering deployments that include:
+#' 1 - species of interest
+#' 2 - sensor type of interest
+#' 3 - no manipulation with the tracked animal
+#' >>> saved as downloadable_studies_deployments_filtered.csv
+# 
+#' 2 - Downloading deployments of interest
+#' - download the tracking data by specifying: individual_local_identifier,
+#'     sensor_type_id, and study_id from before
+#' - keep track of errors
+#' >>> dowload report saved
 
 # 0 - Defining parameters of interest -------------------------------------
 
@@ -103,10 +110,10 @@ if(!dir.exists(here("Data"))){
 
 # 1 - Checking available deployments --------------------------------------
 
-# filtering only the studies that:
-# 1 - have registered deployments
-# 2 - that deploy sensors of interest
-# 3 - with download access
+
+# 1.1. Accessing downloadable studies -------------------------------------
+
+# checking downloadable studies and applying the filtering criteria
 
 # checking all the studies that are available - 6992 studies
 movebank_filtered <- movebank_access |> 
