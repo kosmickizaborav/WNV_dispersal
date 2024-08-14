@@ -15,19 +15,19 @@
 #' 4 - not test deployments
 #' >>> OUTPUT: downloadable_studies.csv
 #' 
-#' **1.2. Downloading deployment info**
+#' **1.2. Downloading deployment info and filter**
 #' download deployment information from studies of interest. 
 #' done in this way because in study info sometimes there is no species specified.
 #' if download failed keep the error info
 #' >>> OUTPUT: downloadable_studies_deployments.csv
 # 
-#' - filtering deployments that include:
+#' filtering deployments that include:
 #' 1 - species of interest
 #' 2 - sensor type of interest
 #' 3 - no manipulation with the tracked animal
-#' >>> saved as downloadable_studies_deployments_filtered.csv
+#' >>> OUTPUT: downloadable_studies_deployments_filtered.csv
 # 
-#' 2 - Downloading deployments of interest
+#' **SECTION 2 - Downloading deployments of interest**
 #' - download the tracking data by specifying: individual_local_identifier,
 #'     sensor_type_id, and study_id from before
 #' - keep track of errors
@@ -115,7 +115,7 @@ if(!dir.exists(here("Data"))){
 
 # checking downloadable studies and applying the filtering criteria
 
-# checking all the studies that are available - 6992 studies
+# checking all the studies that are available
 movebank_filtered <- movebank_access |> 
   map(~ {
     
@@ -142,6 +142,12 @@ movebank_filtered <- movebank_access |>
 
 movebank_filtered |>
   write_csv(here("Data", "downloadable_studies.csv"))
+
+
+
+# 1.2. Downloading deployment info and filter -----------------------------
+
+# accessing deployment information and filtering the deployments of interest
 
 # define a safe version of the function to handle errors
 safe_deployment_download <- safely(~ {
@@ -187,15 +193,15 @@ deployments |>
 
 rm(movebank_filtered)
 
-# filter deployments that include: 
-# 1 - species of interest
-# 2 - sensor type of interest
-# 3 - no manipulation with the tracked animal
+# filter deployments
 deployments_filtered <- deployments |> 
+  # contains species of interest
   filter(taxon_canonical_name %in% target_sp) |> 
+  # contains sensor type of interest
   filter(
     str_detect(sensor_type_ids, str_c(tags_ids, collapse = "|"))
   ) |> 
+  # no manipulation with tracked animals
   filter(manipulation_type == "none" | is.na(manipulation_type))
 
 
@@ -213,11 +219,13 @@ deployments_filtered |>
 
 rm(deployments)
 
+
+
 # 2 - Downloading deployments of interest --------------------------------
 
-# Define a custom function to handle multiple arguments
-# and wrap the custom function with safely
+# Define a custom function to handle multiple arguments and wrap with safely
 # sensor types: 653, 2299894820 - gps, sixfox
+
 study_download <- function(
     study_id = NULL, 
     individual_local_identifier = NULL, 
