@@ -200,7 +200,7 @@ target_sp |>
 
 # 3 - Plotting distances and turning angles -------------------------------
 
-# making plots of step lenght and turning angles
+# making plots of step length and turning angles
 
 target_sp |> 
   map(~{
@@ -213,7 +213,8 @@ target_sp |>
     steps_df <- here("Data", "Studies", sp, fname) |> 
       read_csv(show_col_types = F) |> 
       rename(step = sl_, turn = ta_) |> 
-      mutate(step = step/1000)
+      mutate(step = step/1000) |> 
+      mutate(speed = step/(dt_/3600))
     
     # plotting step lenght
     {
@@ -254,6 +255,25 @@ target_sp |>
         file = here("Data", "Graphs", str_c(sp, "_turns.png"))
         ) 
         #width = 20, height = 25, units = "cm")
+      
+    
+    # {
+    #   
+    #   steps_df |> 
+    #     ggplot() +
+    #     geom_histogram(aes(x = speed), binwidth = 10) +
+    #     labs(
+    #       title = str_c(
+    #         str_replace(sp, "_", " "), " - speed from all tracks"
+    #       ), 
+    #       x = "speed [km/h]"
+    #     ) +
+    #     theme_bw(base_size = 14) 
+    #   
+    #   } |> 
+    #   ggsave(
+    #     file = here("Data", "Graphs", str_c(sp, "_speed.png"))
+    #   )
 
   })
 
