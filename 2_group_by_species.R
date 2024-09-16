@@ -94,7 +94,8 @@ sfiles |>
         
         print(sp)
         
-        fout <- str_c(sp, "_", str_replace(fin, "rds", "csv"))
+        fout <- str_c(sp, "_", fin)
+        # fout <- str_c(sp, "_", str_replace(fin, "rds", "csv"))
         
         .x |> 
           # filter empty locations
@@ -147,10 +148,16 @@ sfiles |>
               .default = NA
             )
           ) |>
-          # drop geometry, since it is kept as lonlat
-          st_drop_geometry() |>  
-          as_tibble() |> 
-          write_csv(here("Data", "Studies", sp, fout))
+          saveRDS(
+            file = here("Data", "Studies", sp, fout), 
+            compress = T
+          )
+          # instead of saving it as csv, 
+          # to avoid potential unwanted data modifications
+          # # drop geometry, since it is kept as lonlat
+          # st_drop_geometry() |>  
+          # as_tibble() |> 
+          # write_csv(here("Data", "Studies", sp, fout))
         
       }
       )
@@ -159,32 +166,6 @@ sfiles |>
   .progress = T
   )
       
-
-# Warning message:
-#   There were 2 warnings in `stopifnot()`.
-# The first warning was:
-#   ℹ In argument: `track_problem = case_when(...)`.
-# Caused by warning in `st_is_longlat()`:
-#   ! bounding box has potentially an invalid value range for longlat data
-# ℹ Run dplyr::last_dplyr_warnings() to see the 1 remaining warning. 
-# 
-# [[1]]
-# <warning/rlang_warning>
-#   Warning in `stopifnot()`:
-#   ℹ In argument: `track_problem = case_when(...)`.
-# Caused by warning in `st_is_longlat()`:
-#   ! bounding box has potentially an invalid value range for longlat data
-# ---
-# 
-# [[2]]
-# <warning/rlang_warning>
-#   Warning in `stopifnot()`:
-#   ℹ In argument: `track_problem = case_when(...)`.
-# Caused by warning in `st_is_longlat()`:
-#   ! bounding box has potentially an invalid value range for longlat data
-# ---
-
-
 
 # 02 - deployment summaries ----------------------------------------------------
 
@@ -195,13 +176,16 @@ target_sp |>
     sp <- .x
     
     sfiles <- here("Data", "Studies", sp) |> 
-      list.files(pattern = "study.csv", full.names = F)
+      list.files(pattern = "study.rds", full.names = F)
     
     sfiles |> 
       map(~{
         
         track_df <- here("Data", "Studies", sp, .x) |> 
-          read_csv(show_col_types = F) |> 
+          readRDS() |> 
+          st_drop_geometry() |>  
+          as_tibble() |>
+          # read_csv(show_col_types = F) |> 
           mutate(across(contains("_id"), as.character))
         
         studyid <- unique(track_df$study_id)
@@ -277,6 +261,30 @@ target_sp |>
     print(str_c(sp, " DONE!"))
     
   })
+
+# Warning message:
+#   There were 2 warnings in `stopifnot()`.
+# The first warning was:
+#   ℹ In argument: `track_problem = case_when(...)`.
+# Caused by warning in `st_is_longlat()`:
+#   ! bounding box has potentially an invalid value range for longlat data
+# ℹ Run dplyr::last_dplyr_warnings() to see the 1 remaining warning. 
+# 
+# [[1]]
+# <warning/rlang_warning>
+#   Warning in `stopifnot()`:
+#   ℹ In argument: `track_problem = case_when(...)`.
+# Caused by warning in `st_is_longlat()`:
+#   ! bounding box has potentially an invalid value range for longlat data
+# ---
+# 
+# [[2]]
+# <warning/rlang_warning>
+#   Warning in `stopifnot()`:
+#   ℹ In argument: `track_problem = case_when(...)`.
+# Caused by warning in `st_is_longlat()`:
+#   ! bounding box has potentially an invalid value range for longlat data
+# ---
 
 
 
