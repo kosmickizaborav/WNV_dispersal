@@ -10,7 +10,7 @@
 #' - keep unique locations (to avoid having step length 0)
 #' - re-sample tracks with predefined rate and tolerance (24 h +- 2h)
 #' - save re-sampled tracks per species
-#' **1.2 - Summary of the resapled tracks**
+#' **1.2 - Summary of the resampled tracks**
 #' - save summary of the sampling rate
 #' 
 #' **SECTION 2 - Converting track to steps**
@@ -56,94 +56,143 @@ resample_tolerance = hours(2)
 
 
 
-# 1 - Resampling tracks -------------------------------------------------------
+# 1 - Re-sampling tracks -------------------------------------------------------
 
-# resampling tracks with the predafined rate and tolerance
+# re-sampling tracks with the predefined rate and tolerance
 
 target_sp |> 
   map(~{
     
     sp <- .x 
     
-    resampled_tracks <- here("Data", "Studies", sp) |> 
+    # folder of the species data
+    sp_dir <- here("Data", "Studies", sp)
+    
+    sp_dir |> 
       # list all studies
-      list.files(pattern = "study.csv") |> 
+      list.files(pattern = "_study.rds") |> 
       map(~{
         
         fname <- .x
         
-        here("Data", "Studies", sp, fname) |> 
-          read_csv(show_col_types = F) |> 
+        # load movebank track Anne's advice, instead of loading like csv
+        # read_csv(show_col_types = F) |> 
+        # mk_track(
+        #   .x = lon, 
+        #   .y = lat, 
+        #   .t = timestamp, 
+        #   crs = sf::st_crs(4326),
+        #   # crs = 4326,
+        #   # alternative way to specify crs
+        #   all_cols = T
+        # )
+        move_track <- here(sp_dir, fname) |> 
+          readRDS() |> 
           # keep points that have no problem
-          filter(is.na(track_problem)) |> 
-          select(-track_problem) |> 
-          # select columns of interest
-          select(any_of(main_cols)) |> 
-          mk_track(
-            .x = lon, 
-            .y = lat, 
-            .t = timestamp, 
-            crs = sf::st_crs(4326),
-            # crs = 4326,
-            # alternative way to specify crs
-            all_cols = T
-          ) |> 
-          # eliminating duplicated positions per individual do avoid distances 0,
-          # this is a bit extreme as positions can be days spaces apart, 
-          # but couldn't think of a better way
-          distinct(x_, y_, .keep_all = T, .by = track_id) |> 
-          mutate(
-            study_id = str_remove_all(fname, str_c(sp, "|_|", "study.csv"))
-          ) |> 
-          group_split(study_id, track_id) |> 
-          map(~{
-            
-            # re-sampled tracks using predefined sampling rate and tolerance
-            .x |> 
-              track_resample(
-                rate = resample_rate, 
-                tolerance = resample_tolerance
-              ) 
-            
-          }) |> 
-          bind_rows() 
+          filter(is.na(track_problem)) 
+        
+        if(nrow(move_track) > 0) {
+          
+          # converting move2 track to amt track
+          move_track |>
+            track(
+              x = st_coordinates(move_track)[,1],
+              y = st_coordinates(move_track)[,2],
+              t = move2::mt_time(move_track),
+              crs = sf::st_crs(move_track)
+            ) |>
+            # eliminating duplicated positions per individual 
+            # to avoid distances 0,
+            # this is a bit extreme as positions can be days spaced apart,
+            # but couldn't think of a better way
+            distinct(x_, y_, .keep_all = T, .by = track_id) |>
+            mutate(
+              study_id = str_remove_all(fname, str_c(sp, "|_|", "study.rds"))
+            ) |>
+            group_split(study_id, track_id) |>
+            map(~{
+
+              # re-sampled tracks using predefined sampling rate and tolerance
+              .x |>
+                track_resample(
+                  rate = resample_rate,
+                  tolerance = resample_tolerance
+                )
+
+            }) |>
+            bind_rows() |> 
+            mutate(resample_comment = "track resampled")
+          
+        } else {
+          
+          # in case there are 0 locations after filtering tracks
+          tibble(
+            study_id = str_remove_all(fname, str_c(sp, "|_|", "study.rds")), 
+            resample_comment = "didn't pass filtering"
+            )
+          
+        }
         
       }) |> 
-      bind_rows() 
-    
-    # saving re-sampled tracks
-    resampled_tracks |> 
-      write_csv(
-        here("Data", "Studies", sp, str_c(sp, "_all_tracks_resampled.csv"))
+      bind_rows() |> 
+      # saving re-sampled tracks
+      saveRDS(
+        here(sp_dir, str_c(sp, "_all_tracks_resampled.rds")), 
+        compress = T
       )
+    
+    print(str_c(sp, " DONE!"))
+    
+    }, 
+    .progress = T
+    )
     
 
 # 1.2 - summary of the resampled tracks --------------------------------------
 
-    # it reports an error in summary if you pass these tracks, 
+target_sp |> 
+  map(~{
+    
+    sp <- .x 
+    sp_dir <- here("Data", "Studies", sp)
+    
+    resampled_tracks <- here(sp_dir, str_c(sp, "_all_tracks_resampled.rds")) |> 
+      readRDS() |> 
+      mutate(n = n(), .by = c("study_id", "track_id"))
+    
+    # it reports an error in summary if you pass these tracks,
+    # because there is insufficient data to summarize
     # but I wanted to keep track of them, so saved them like this
-    filtered <- resampled_tracks |> 
-      filter(n() < 2, .by = c("study_id", "track_id")) |> 
-      mutate(
-        n = n(), 
-        comment = "insufficient tracking time"
-      ) |> 
-      select(study_id, track_id, comment)
-      
-    resampled_tracks |> 
-      filter(n() >= 2, .by = c("study_id", "track_id")) |> 
+    filtered <- resampled_tracks |>
+      filter(n < 2) 
+
+    resampled_tracks |>
+      filter(n >= 2) |>
       summarize_sampling_rate_many(
         c("study_id", "track_id"), time_unit = "hour"
-      ) |> 
-      bind_rows(filtered) |> 
-      write_csv(
-        here(
-          "Data", "Studies", sp, 
-          str_c(sp, "_all_tracks_resampled_sampling_rate.csv")
-        )
-      )
+      ) |>
+      as_tibble() 
     
-    print(str_c(sp, " DONE!"))
+    if(nrow(filtered) > 0){
+      
+      filtered <- filtered |>
+        mutate(
+          resample_comment = ifelse(
+            resample_comment == "track resampled", 
+            "insufficient tracking time", 
+            resample_comment
+          )
+        )
+          
+      resampled_tracks <- resampled_tracks |> 
+        bind_rows(filtered)
+          
+    }
+    
+    resampled_tracks |> 
+      write_csv(here(sp_dir, str_c(sp, "_all_tracks_resampled_summary.csv")))
+
+    print(str_c(sp, " summary DONE!"))
     
   }, 
   .progress = T
@@ -158,27 +207,16 @@ target_sp |>
   map(~{
     
     sp <- .x 
+    sp_dir <- here("Data", "Studies", sp)
     
-    fname <- here("Data", "Studies", sp) |> 
-      list.files(pattern = "_all_tracks_resampled.csv") 
-    
-    here("Data", "Studies", sp, fname) |> 
-      read_csv(show_col_types = F) |> 
-      mk_track(
-        .x = x_, 
-        .y = y_, 
-        .t = t_, 
-        crs = sf::st_crs(4326),
-        # crs = 4326,
-        # alternative way to specify crs
-        all_cols = T
-      ) |> 
+    resampled_tracks <- here(sp_dir, str_c(sp, "_all_tracks_resampled.rds")) |> 
+      readRDS() |>
       group_split(study_id, track_id) |> 
       map(~{
         
         .x |> 
-          # for transforming the coordinate system, in case needed in the future
-          # crs_sub <-  mt_aeqd_crs(mt_as_move2(sub), center = "centroid", units = "m")
+          # for transforming the coordinate system, for the future
+          # crs_sub <- mt_aeqd_crs(mt_as_move2(sub), center = "centroid", units = "m")
           # transform_coords(st_crs(crs_sub)) |>
           filter_min_n_burst(min_n = 3) |>
           steps_by_burst(lonlat = T, keep_cols = T) |> 
@@ -189,12 +227,16 @@ target_sp |>
         
       }) |> 
       bind_rows() |> 
-      write_csv(
-        here("Data", "Studies", sp, str_replace(fname, ".csv", "_steps.csv"))
+      saveRDS(
+        here(sp_dir, str_c(sp, "_all_tracks_resampled_steps.rds")), 
+        compress = T
       )
       
+    print(str_c(sp, " summary DONE!"))
       
-  })
+  }, 
+  .progress = T
+  )
 
 
 
@@ -207,26 +249,28 @@ target_sp |>
     
     sp <- .x 
     
-    fname <- here("Data", "Studies", sp) |> 
-      list.files(pattern = "_all_tracks_resampled_steps.csv") 
+    sp_dir <- here("Data", "Studies", sp)
     
-    steps_df <- here("Data", "Studies", sp, fname) |> 
-      read_csv(show_col_types = F) |> 
+    steps_df <- here(sp_dir, str_c(sp, "_all_tracks_resampled_steps.rds")) |> 
+      readRDS() |> 
       rename(step = sl_, turn = ta_) |> 
-      mutate(step = step/1000) |> 
-      mutate(speed = step/(dt_/3600))
+      mutate(
+        step = step/1000, 
+        dt_ = as.numeric(dt_, units = "hours"), 
+        speed = step/dt_
+      )
     
-    # plotting step lenght
+    # plotting step length
     {
       
       steps_df |> 
         ggplot() +
-        geom_histogram(aes(x = step), binwidth = 10) +
+        geom_histogram(aes(x = step), binwidth = 1) +
         labs(
           title = str_c(
             str_replace(sp, "_", " "), " - step lengths from all tracks"
           ), 
-          x = "step length [km]"
+          x = "step length [km] | binwidth = 1"
         ) +
         theme_bw(base_size = 14) 
       
@@ -246,53 +290,42 @@ target_sp |>
           title = str_c(
             str_replace(sp, "_", " "), " - turning angles from all tracks"
           ), 
-          x = "turning angle [rad]"
+          x = "turning angle [rad] | binwidth = 0.1"
         ) +
         theme_bw(base_size = 14) 
       
       } |> 
-      ggsave(
-        file = here("Data", "Graphs", str_c(sp, "_turns.png"))
-        ) 
+      ggsave(file = here("Data", "Graphs", str_c(sp, "_turns.png"))) 
         #width = 20, height = 25, units = "cm")
       
     
-    # {
-    #   
-    #   steps_df |> 
-    #     ggplot() +
-    #     geom_histogram(aes(x = speed), binwidth = 10) +
-    #     labs(
-    #       title = str_c(
-    #         str_replace(sp, "_", " "), " - speed from all tracks"
-    #       ), 
-    #       x = "speed [km/h]"
-    #     ) +
-    #     theme_bw(base_size = 14) 
-    #   
-    #   } |> 
-    #   ggsave(
-    #     file = here("Data", "Graphs", str_c(sp, "_speed.png"))
-    #   )
+    {
+
+      steps_df |>
+        ggplot() +
+        geom_histogram(aes(x = speed), binwidth = 1) +
+        labs(
+          title = str_c(
+            str_replace(sp, "_", " "), " - speed from all tracks"
+          ),
+          x = "speed [km/h] | binwidth = 1"
+        ) +
+        theme_bw(base_size = 14)
+
+      } |>
+      ggsave(
+        file = here("Data", "Graphs", str_c(sp, "_speed.png"))
+      )
 
   })
 
+
 # Warning messages:
-# 1: One or more parsing issues, call `problems()` on your data frame for details, e.g.:
-#   dat <- vroom(...)
-# problems(dat) 
-# 2: One or more parsing issues, call `problems()` on your data frame for details, e.g.:
-#   dat <- vroom(...)
-# problems(dat) 
-# 3: One or more parsing issues, call `problems()` on your data frame for details, e.g.:
-#   dat <- vroom(...)
-# problems(dat) 
-# 4: One or more parsing issues, call `problems()` on your data frame for details, e.g.:
-#   dat <- vroom(...)
-# problems(dat) 
-# 5: Removed 625 rows containing non-finite values (`stat_bin()`). 
-# 6: Removed 1 rows containing non-finite values (`stat_bin()`). 
-# 7: Removed 446 rows containing non-finite values (`stat_bin()`). 
-# 8: Removed 125 rows containing non-finite values (`stat_bin()`). 
-# 9: Removed 259 rows containing non-finite values (`stat_bin()`). 
+# 1: Removed 625 rows containing non-finite values (`stat_bin()`). 
+# 2: Removed 1 rows containing non-finite values (`stat_bin()`). 
+# 3: Removed 446 rows containing non-finite values (`stat_bin()`). 
+# 4: Removed 125 rows containing non-finite values (`stat_bin()`). 
+# 5: Removed 259 rows containing non-finite values (`stat_bin()`). 
+
+
 
