@@ -1,0 +1,9 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+
+# ignore all files in any directory named build
+Data/
+Best_practices/
+Anne_data/
