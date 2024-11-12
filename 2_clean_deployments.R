@@ -9,7 +9,9 @@
 #'   1 - empty geometry
 #'   2 - weird years (i.e. year < 1950)
 #'   3 - and coordinates (e.g. long > 180 and lat < 90)
-#'   4 - duplicated time-stamps
+#'   4 - duplicated time-stamps 
+#'       the time-stamps were first rounded to the lowest minute, so that we 
+#'       select one location per minute with the lowest hdop
 #'   5 - only one location per deployment
 
 # 0 - Defining parameters and packages ---------------------------------------
@@ -29,7 +31,8 @@ target_sp <- here("Data", "1_downloadable_studies_deployments_filtered.csv") |>
 col_deploy <- c("taxon_canonical_name", "study_id", "deployment_id", 
                 "individual_id", "individual_local_identifier", 
                 "individual_number_of_deployments", 
-                "deployment_local_identifier", "tag_local_identifier", 
+                "sensor_type_ids",
+                "deployment_local_identifier", "tag_local_identifier", "tag_id",
                 "sex", "animal_life_stage",  "manipulation_type",
                 "manipulation_comments"
 )
@@ -74,7 +77,12 @@ target_sp |>
           # in some cases there are multiple deployments per individual
           # group_by(individual_local_identifier, deployment_id) |> 
           # this should be out in the new script
-          mutate(n_na = rowSums(is.na(pick(everything())))) |> 
+          # rounding timestamp to minute to take only one position per minute
+          # with the lowest hdop
+          mutate(
+            n_na = rowSums(is.na(pick(everything()))), 
+            timestamp = floor_date(timestamp, unit = "min")
+          ) |> 
           # ordering by gps_hdop, and or by the number of na's in rows, 
           # so that it's minimized
           arrange(across(any_of(c("timestamp", "gps_hdop", "n_na")))) |>

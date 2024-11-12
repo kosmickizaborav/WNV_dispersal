@@ -24,7 +24,8 @@
 #' filtering deployments that include:
 #' 1 - species of interest
 #' 2 - sensor type of interest
-#' 3 - no manipulation with the tracked animal
+#' 3 - no manipulation with the tracked animal 
+#'     but everything saved, so we can filter it later
 #' >>> OUTPUT: downloadable_studies_deployments_filtered.csv
 #' 
 #' **1.3. Creating folder for every species**
@@ -67,8 +68,9 @@ tags_ids <- c(
 # defining columns from deployment
 col_deploy <- c("taxon_canonical_name", "study_id", "deployment_id", 
                 "individual_id", "individual_local_identifier", 
+                "sensor_type_ids",
                 "individual_number_of_deployments", 
-                "deployment_local_identifier", "tag_local_identifier", 
+                "deployment_local_identifier", "tag_id", "tag_local_identifier", 
                 "sex", "animal_life_stage",  "manipulation_type",
                 "manipulation_comments"
                 )
@@ -171,8 +173,11 @@ deployments <- movebank_filtered |>
       
     } else { # if there are no results, save the error and study id
       
-      tibble(study_id = .x$id, error_text = as.character(res$error)) |> 
-        mutate(account = acc)
+      tibble(
+        study_id = .x$id, 
+        error_text = as.character(res$error), 
+        account = acc
+      ) 
       
     }
     
@@ -182,17 +187,6 @@ deployments <- movebank_filtered |>
   bind_rows() |> 
   rename(species = taxon_canonical_name) 
 
-# Warning messages:                                  
-#   1: `vroom()` finds reading problems with the movebank specification.
-# ℹ This might relate to the returned data not fitting the expectation of
-#  the movebank data format specified in the package.
-# ℹ For retrieving the specific problem you can enable `global_entrace`
-#  using rlang::global_entrace() then run the command and use
-# `rlang::last_warnings()[[1]]$problems` to retrieve the problems.
-# ℹ The requested url can then be retrieved with: `rlang::last_warnings()[[1]]$url`
-# ℹ Alternatively in some cases you might be able to retrieve the problems calling
-#  `vroom::problems()` on the result of the function
-# call that produced the warning. 
 
 # saving the list of all deployments
 deployments |> 
@@ -208,7 +202,7 @@ deployments_filtered <- deployments |>
   # contains sensor type of interest
   filter(str_detect(sensor_type_ids, str_c(tags_ids, collapse = "|"))) |> 
   # no manipulation with tracked animals
-  filter(manipulation_type == "none" | is.na(manipulation_type)) |> 
+  filter(manipulation_type == "none" | is.na(manipulation_type)) |>
   select(any_of(c("species", "account", col_deploy)))
 
 
@@ -223,6 +217,20 @@ deployments_filtered |>
   write_csv(here("Data", "1_downloadable_studies_deployments_filtered.csv"))
 
 rm(deployments)
+
+# warning x10:
+# Warning messages:                                  
+#   1: `vroom()` finds reading problems with the movebank specification.
+# ℹ This might relate to the returned data not fitting the expectation of
+#  the movebank data format specified in the package.
+# ℹ For retrieving the specific problem you can enable `global_entrace` 
+# using rlang::global_entrace() then run the command and use
+# `rlang::last_warnings()[[1]]$problems` to retrieve the problems.
+# ℹ The requested url can then be retrieved with:
+# `rlang::last_warnings()[[1]]$url`
+# ℹ Alternatively in some cases you might be able to retrieve the problems 
+# calling `vroom::problems()` on the result of the function call that
+# produced the warning. 
 
 
 # 2 - Downloading studies per species -------------------------------------
@@ -253,8 +261,12 @@ deployments_filtered |>
     if(!dir.exists(sp_dir)) {
       
       sp_dir |> dir.create()
+       
+    }
+    
+    if(!dir.exists(here(sp_dir, "1_deployments"))){
       
-      here(sp_dir, "1_deployments") |>  dir.create()
+      here(sp_dir, "1_deployments") |> dir.create()
       
     }
     
@@ -409,7 +421,8 @@ download_report <- deployments_filtered |>
         individual_local_identifier = ind_local,
         individual_id = study_file$individual_id,
         deployment_id = study_file$deployment_id,
-        account = account
+        account = account, 
+        downloaded_at = file.mtime(here(sp_dir, study_file$file))
         # deploy_total = length(deployment_ids),
         # deploy_download = length(unique(df$deployment_id))
       )

@@ -1,23 +1,28 @@
 #' ---
-#' title: "Re-sampling tracking data and extracting basic track parameters"
+#' title: "MORNING - re-sampling tracking data and extracting basic track parameters"
 #' output: github_document
 #' ---
 
 # INFO --------------------------------------------------------------------
 
+#' the script is identical to the 5a script, except that the tracks were first
+#' filtered so that they encompass the morning hours of the day 
+#' before resampling
+#' 
+#' 
 #' **SECTION 1 - Re-sampling tracks**
 #' resample the tracks using predefined resample and tolerance rate, 
 #' save all the resampled tracks in one file per species
-#' output: "5a_all_tracks_one_loc_per_day.rds"
+#' output: "5a_all_tracks_one_loc_per_day_morning.rds"
 #' 
 #' **SECTION 2 - Summary of re-sampled tracks**
 #' saving the summary of resampled tracks
-#' output: "5a_all_tracks_one_loc_per_day_summary.csv
+#' output: "5a_all_tracks_one_loc_per_day_morning_summary.csv
 #' 
 #' **SECTION 3 - Converting track into steps**
 #' converting track to steps with the minimal burst of 3 (3 location in a row)
 #' to assure the calucation of the turning angle
-#' output: "5a_all_tracks_one_loc_per_day_bursts.rds"
+#' output: "5a_all_tracks_one_loc_per_day_morning_bursts.rds"
 
 # 0 - packages and files --------------------------------------------------
 
@@ -66,7 +71,8 @@ if(!dir.exists(ggraph_dir)) { ggraph_dir |> dir.create() }
 # 1 - Re-sampling tracks --------------------------------------------------
 
 # re-sampling tracks with the predefined rate and tolerance
-# 
+
+
 target_sp |> 
   map(~{
     
@@ -90,38 +96,46 @@ target_sp |>
         print(paste(sp, which(fname == files), "|", lfl))
         
         mtrack <- here(sp_dir, "4_filtered_speed", fname) |> 
-          read_rds() 
+          read_rds() |> 
+          filter(
+            timestamp <= day_start + resample_tolerance &
+              timestamp >= day_start - resample_tolerance
+          )
         
-        # resampling the track
-        mtrack |> 
-          track(
-            x = st_coordinates(mtrack)[,1],
-            y = st_coordinates(mtrack)[,2],
-            t = move2::mt_time(mtrack),
-            crs = sf::st_crs(mtrack)
-          ) |> 
-          # eliminating duplicated positions per individual 
-          # to avoid distances 0,
-          # this is a bit extreme as positions can be days spaced apart,
-          # but couldn't think of a better way
-          # distinct(x_, y_, .keep_all = T, .by = track_id) 
-          track_resample(
-            rate = resample_rate,
-            tolerance = resample_tolerance
-          ) |> 
-          mutate(file = fname)
+        if(nrow(mtrack) > 0){
+          
+          # resampling the track
+          mtrack |> 
+            track(
+              x = st_coordinates(mtrack)[,1],
+              y = st_coordinates(mtrack)[,2],
+              t = move2::mt_time(mtrack),
+              crs = sf::st_crs(mtrack)
+            ) |> 
+            # eliminating duplicated positions per individual 
+            # to avoid distances 0,
+            # this is a bit extreme as positions can be days spaced apart,
+            # but couldn't think of a better way
+            # distinct(x_, y_, .keep_all = T, .by = track_id) 
+            track_resample(
+              rate = resample_rate,
+              tolerance = resample_tolerance
+            ) |> 
+            mutate(file = fname)
+          
+        }
         
       }) |> # map files
       bind_rows() |> 
       # saving re-sampled tracks
       write_rds(
-        here(sp_dir, "5_distances", "5a_all_tracks_one_loc_per_day.rds")
+        here(sp_dir, "5_distances", "5a_all_tracks_one_loc_per_day_morning.rds")
       )
     
     print(paste(sp, "DONE!"))
     
-    })
-    
+  })
+
 
 
 # 2 - summary of the re-sampled tracks ----------------------------------------
@@ -133,7 +147,7 @@ target_sp |>
     
     ddir <- here("Data", "Studies", .x, "5_distances")
     
-    resampled_tracks <- here(ddir, "5a_all_tracks_one_loc_per_day.rds") |> 
+    resampled_tracks <- here(ddir, "5a_all_tracks_one_loc_per_day_morning.rds") |> 
       read_rds() |> 
       mutate(n = n(), .by = file)
     
@@ -159,18 +173,15 @@ target_sp |>
     }
     
     resampled_tracks |> 
-      write_csv(here(ddir, "5a_all_tracks_one_loc_per_day_summary.csv"))
+      write_csv(here(ddir, "5a_all_tracks_one_loc_per_day_morning_summary.csv"))
     
     print(paste(.x, "DONE!"))
     
   }, .progress = T)
 
-# check <- here("Data", "Studies", target_sp[1], "5_distances", "all_tracks_one_loc_per_day_summary.csv") |> 
-#   read_csv()
+
 
 # 3 - Converting track to steps ---------------------------------------------
-
-
 
 target_sp |> 
   map(~{
@@ -178,7 +189,7 @@ target_sp |>
     sp <- .x 
     ddir <- here("Data", "Studies", sp, "5_distances")
     
-    here(ddir, "5a_all_tracks_one_loc_per_day.rds") |> 
+    here(ddir, "5a_all_tracks_one_loc_per_day_morning.rds") |> 
       read_rds() |> 
       group_split(file) |> 
       map(~{
@@ -200,7 +211,7 @@ target_sp |>
         
       }) |> 
       bind_rows() |> 
-      write_rds(here(ddir, "5a_all_tracks_one_loc_per_day_bursts.rds"))
+      write_rds(here(ddir, "5a_all_tracks_one_loc_per_day_morning_bursts.rds"))
       
     print(str_c(.x, " DONE!"))
       
@@ -221,7 +232,7 @@ target_sp |>
     sp_dir <- here("Data", "Studies", .x)
     
     steps_df <- here(
-      sp_dir, "5_distances", "5a_all_tracks_one_loc_per_day_bursts.rds"
+      sp_dir, "5_distances", "5a_all_tracks_one_loc_per_day_morning_bursts.rds"
       ) |> 
       read_rds() |> 
       rename(step = sl_, turn = ta_) |> 
@@ -266,7 +277,7 @@ target_sp |>
       )
         
     ggsave(
-      here(sp_dir, "Graphs","5a_one_loc_per_day.pdf"), 
+      here(sp_dir, "Graphs","5a_one_loc_per_day_morning.pdf"), 
       width = 30, 
       units = "cm"
     )
@@ -274,6 +285,12 @@ target_sp |>
    
   })
 
+# Warning messages:
+#   1: Removed 9492 rows containing non-finite values (`stat_bin()`). 
+# 2: Removed 1183 rows containing non-finite values (`stat_bin()`). 
+# 3: Removed 681 rows containing non-finite values (`stat_bin()`). 
+# 4: Removed 195 rows containing non-finite values (`stat_bin()`). 
+# 5: Removed 991 rows containing non-finite values (`stat_bin()`). 
 
 
 # 5 - Plot distances for all species --------------------------------------
@@ -284,7 +301,9 @@ step_df <- target_sp |>
     
     sp_dir <- here("Data", "Studies", .x)
     
-    here(sp_dir, "5_distances", "5a_all_tracks_one_loc_per_day_bursts.rds") |> 
+    here(
+      sp_dir, "5_distances", "5a_all_tracks_one_loc_per_day_morning_bursts.rds"
+      ) |> 
       read_rds() |> 
       mutate(species = str_replace(.x, "_", " ")) |> 
       rename(step = sl_) 
@@ -302,14 +321,14 @@ step_df |>
   facet_wrap(~ species, ncol = 1, scales = "free_y") +
   labs(
     x = bquote("step length [m] | binwidth =" ~ 10^3), 
-    title = "Tracks subset - one location per day"
+    title = "Tracks subset - one location per day - morning"
   ) +
   theme_bw() +
   scale_x_continuous(label = ~custom_scientific(.x, fixed_exp = 3))
 
 
 ggsave(
-  here(ggraph_dir, "5a_one_loc_per_day_steps.pdf"), 
+  here(ggraph_dir, "5a_one_loc_per_day_morning_steps.pdf"), 
   height = 15,
   units = "cm"
 )
@@ -325,12 +344,12 @@ step_df |>
   facet_wrap(~ species, ncol = 1, scales = "free_y") +
   labs(
     x = "step length [m] - log scale | bins = 100",
-    title = "Tracks subset - one location per day"
+    title = "Tracks subset - one location per day - morning"
   ) +
   theme_bw()
 
 ggsave(
-  here(ggraph_dir, "5a_one_loc_per_day_steps_log10.pdf"), 
+  here(ggraph_dir, "5a_one_loc_per_day_morning_steps_log10.pdf"), 
   height = 15,
   units = "cm"
 )
@@ -346,65 +365,20 @@ step_df |>
   ) +
   labs(
     x = "step length [m]", 
-    title = "Tracks subset - one location per day"
+    title = "Tracks subset - one location per day - morning"
   ) +
   theme_bw() +
   scale_x_continuous(label = ~custom_scientific(.x, fixed_exp = 3))
 
 ggsave(
-  here(ggraph_dir, "5a_one_loc_per_day_steps_box.pdf"), 
+  here(ggraph_dir, "5a_one_loc_per_day_morning_steps_box.pdf"), 
   units = "cm"
 )
 
 
-
 # Warning messages:
-#   1: Removed 9492 rows containing non-finite values (`stat_bin()`). 
-# 2: Removed 1183 rows containing non-finite values (`stat_bin()`). 
-# 3: Removed 681 rows containing non-finite values (`stat_bin()`). 
-# 4: Removed 195 rows containing non-finite values (`stat_bin()`). 
-# 5: Removed 991 rows containing non-finite values (`stat_bin()`). 
-
-# trying with move2 package -----------------------------------------------
-# checked if the same distances and speeds are obtained with move2 package, 
-# used atm because it is faster
-# 
-# data <- target_sp[1] |> 
-#   map(~{
-#     
-#     ddir <- here("Data", "Studies", .x, "5_distances")
-#     
-#     dir.create(here(ddir, "one_loc_move2"))
-#     
-#     here(ddir, "5a_all_tracks_one_loc_per_day.rds") |> 
-#       read_rds() |>
-#       mutate(n_burst = n(), .by = c(burst_, file)) |> 
-#       filter(n_burst >= 3) |> 
-#       group_split(file, burst_) |> 
-#       map(~{
-#         
-#         file <- unique(.x$file)
-#         
-#         track <- .x |> 
-#           mt_as_move2() 
-#         
-#         track |> 
-#           mutate(
-#             speed = mt_speed(track, units = "m/s"), 
-#             distance = mt_distance(track, units = "m")
-#           ) |> 
-#           st_drop_geometry() |> 
-#           as_tibble() 
-#           #write_rds(here(ddir, "one_loc_move2", file))
-#       
-#         # track |> 
-#         #   mutate(
-#         #     speed = mt_speed(track, units = "m/s"), 
-#         #     distance = mt_distance(track, units = "m")
-#         #   )
-#         
-#       }) |> 
-#       bind_rows()
-#         
-#   }) |> 
-#   bind_rows()
+# 1: Removed 954 rows containing non-finite values (`stat_bin()`). 
+# 2: Removed 512 rows containing non-finite values (`stat_bin()`). 
+# 3: Removed 83 rows containing non-finite values (`stat_bin()`). 
+# 4: Removed 193 rows containing non-finite values (`stat_bin()`). 
+# 5: Removed 530 rows containing non-finite values (`stat_bin()`). 

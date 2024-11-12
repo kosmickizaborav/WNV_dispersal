@@ -10,6 +10,7 @@
 #' using an online converter
 #' https://journals.plos.org/plosbiology/article?id=10.1371/journal.pbio.0050197#s5
 #' Bruderer_2001_extracted_from_paper extracted manually from paper: 
+#' https://onlinelibrary.wiley.com/doi/abs/10.1111/j.1474-919x.2001.tb04475.x
 #'
 #' **SECTION 2 - Speed distribution in unfiltered data**
 #' - explore the speed distribution for each species
@@ -36,7 +37,6 @@ library(readxl)
 library(units)
 library(ggpubr)
 library(suncalc)
-
 
 #source("0_helper_functions.R")
 
@@ -67,7 +67,7 @@ target_sp |>
     }
   })
 
-day_lim <- c(end = "nauticalDusk", start = "nauticalDawn")
+sun_times <- c(start = "dawn", end = "dusk", "nauticalDawn", "nauticalDusk")
 
 
 # 1 -  Flight speed limits from literature --------------------------------
@@ -172,7 +172,7 @@ speed_species |>
         )
       )
     
-    ggsave(here(out_dir, "4_unfiltered_speed_turn.pdf"))
+    ggsave(here(out_dir, "4_speed_turn_before_filtering.pdf"))
     
     }
   )
@@ -205,15 +205,15 @@ quant_preclean <- speed_species |>
   ) 
 
 quant_preclean |> 
-  write_csv(here("Data", "Studies", "4_unfiltered_speed_quantiles.csv"))
+  write_csv(here("Data", "Studies", "4_speed_quantiles_before_filtering.csv"))
 
-times <- speed_species |> 
-  map(~{
-    .x |> 
-      distinct(species, compute_end_time, compute_start_time) |> 
-      mutate(computing_time = compute_end_time - compute_start_time) 
-  }) |> 
-  bind_rows()
+# times <- speed_species |> 
+#   map(~{
+#     .x |> 
+#       distinct(species, compute_end_time, compute_start_time) |> 
+#       mutate(computing_time = compute_end_time - compute_start_time) 
+#   }) |> 
+#   bind_rows()
 
 rm(speed_species)
 
@@ -281,7 +281,7 @@ species_clean <- tracks_list |>
                 lat = st_coordinates(track)[, 2],
                 lon = st_coordinates(track)[, 1]
               ), 
-              keep = c(day_lim[["start"]], day_lim[["end"]]),
+              keep = sun_times,
               tz = "UTC"
             ) |> 
             mutate(
@@ -290,17 +290,17 @@ species_clean <- tracks_list |>
               yearday = yday(date),
               row_id = str_c("row_", 1:n())
             ) |>
-            rename_with(~"day_start", all_of(day_lim[["start"]])) |>
-            rename_with(~"day_end", all_of(day_lim[["end"]])) |>
+            rename_with(~"day_start", all_of(sun_times[["start"]])) |>
+            rename_with(~"day_end", all_of(sun_times[["end"]])) |>
             # grouping days by light cycle
             mutate(
-              day_cycle = str_c(
-                if_else(timestamp < day_start, yearday - 1, yearday),
-                "_",
-                year
+              day_cycle = if_else(
+                timestamp < day_start, 
+                str_c(yday(date - 1), "_", year(date - 1)),
+                str_c(yearday, "_", year)
               )
             ) |> 
-            select(row_id, day_cycle, day_start, day_end)
+            select(row_id, day_cycle, day_start, day_end, any_of(sun_times))
             
           
           track |>  
@@ -388,7 +388,7 @@ target_sp |>
         )
       )
     
-    ggsave(here(sp_dir, "Graphs", "4_filtered_speed_turn.pdf"))
+    ggsave(here(sp_dir, "Graphs", "4_speed_turn_after_filtering.pdf"))
     
     sp_quant <- round(
       quantile(speed_df$speed, seq(0.95, 1, 0.001), na.rm = T), 
@@ -408,35 +408,35 @@ target_sp |>
     bird_speeds,
     by = "species"
   ) |>  
-  write_csv(here("Data", "Studies", "4_filtered_speed_quantiles.csv"))
+  write_csv(here("Data", "Studies", "4_speed_quantiles_after_filtering.csv"))
   
 
 
-
-
-# There were 20 warnings 
+# There were 21 warnings (use warnings() to see them)
+# > warnings()
 # Warning messages:
 #   1: Removed 428 rows containing non-finite values (`stat_bin()`).
-# 2: Removed 272857 rows containing non-finite values (`stat_bin()`).
+# 2: Removed 19292 rows containing non-finite values (`stat_bin()`).
 # 3: Removed 23 rows containing non-finite values (`stat_bin()`).
-# 4: Removed 108317 rows containing non-finite values (`stat_bin()`).
-# 5: Removed 237 rows containing non-finite values (`stat_bin()`).
-# 6: Removed 1083694 rows containing non-finite values (`stat_bin()`).
-# 7: Removed 202 rows containing non-finite values (`stat_bin()`).
-# 8: Removed 689 rows containing non-finite values (`stat_bin()`).
-# 9: Removed 608 rows containing non-finite values (`stat_bin()`).
-# 10: Removed 3211 rows containing non-finite values (`stat_bin()`).
-# 11: Removed 427 rows containing non-finite values (`stat_bin()`).
-# 12: Removed 272584 rows containing non-finite values (`stat_bin()`).
-# 13: Removed 23 rows containing non-finite values (`stat_bin()`).
-# 14: Removed 108317 rows containing non-finite values (`stat_bin()`).
-# 15: Removed 236 rows containing non-finite values (`stat_bin()`).
-# 16: Removed 1082314 rows containing non-finite values (`stat_bin()`).
-# 17: Removed 197 rows containing non-finite values (`stat_bin()`).
-# 18: Removed 676 rows containing non-finite values (`stat_bin()`).
-# 19: Removed 574 rows containing non-finite values (`stat_bin()`).
-# 20: Removed 3117 rows containing non-finite values (`stat_bin()`).
-
+# 4: Removed 762 rows containing non-finite values (`stat_bin()`).
+# 5: Removed 273 rows containing non-finite values (`stat_bin()`).
+# 6: Removed 13557 rows containing non-finite values (`stat_bin()`).
+# 7: Removed 212 rows containing non-finite values (`stat_bin()`).
+# 8: Removed 711 rows containing non-finite values (`stat_bin()`).
+# 9: Removed 611 rows containing non-finite values (`stat_bin()`).
+# 10: Removed 1788 rows containing non-finite values (`stat_bin()`).
+# 11: In max.default(structure(NA_real_, units = structure(list( ...
+# no non-missing arguments to max; returning -Inf
+# 12: Removed 427 rows containing non-finite values (`stat_bin()`).
+# 13: Removed 19235 rows containing non-finite values (`stat_bin()`).
+# 14: Removed 23 rows containing non-finite values (`stat_bin()`).
+# 15: Removed 762 rows containing non-finite values (`stat_bin()`).
+# 16: Removed 272 rows containing non-finite values (`stat_bin()`).
+# 17: Removed 13503 rows containing non-finite values (`stat_bin()`).
+# 18: Removed 207 rows containing non-finite values (`stat_bin()`).
+# 19: Removed 694 rows containing non-finite values (`stat_bin()`).
+# 20: Removed 578 rows containing non-finite values (`stat_bin()`).
+# 21: Removed 1719 rows containing non-finite values (`stat_bin()`).
 
 
 # Function for speeds, slows down -----------------------------------------

@@ -43,7 +43,6 @@ original_tracks <- target_sp |>
         
         print(paste(sp, fname, which(fname == sfiles), "|", length(sfiles)))
         
-        
         track <- here(sp_dir, "2_cleaned", fname) |> 
           read_rds()
         
@@ -53,11 +52,12 @@ original_tracks <- target_sp |>
           # individual local identifier should not be missing considering that
           # the data was downloaded using this local id
           mutate(
-            tag_local_identifier = 
-              if("tag_id" %in% colnames(.) & all(is.na(tag_local_identifier))) 
-              tag_id
-              else
-              str_c("deploy_", deployment_id)
+            across(contains("tag_"), as.character),
+            tag_local_identifier = if_else(
+              is.na(tag_local_identifier),
+              tag_id,
+              tag_local_identifier
+              )
           ) |> 
           # getting the summary of each deployment:
           # start, end, number of tracking days, etc. 
@@ -72,11 +72,12 @@ original_tracks <- target_sp |>
               as.numeric(difftime(track_end, track_start, units="days")), 2
             ),
             track_unique_days = length(unique(date(timestamp))), 
-            median_timelag_mins = round(median(timelag, na.rm=T), 1),
-            min_timelag_mins = round(min(timelag, na.rm=T), 1),
+            median_timelag_mins = round(median(timelag, na.rm = T), 1),
+            mean_timelag_mins = round(mean(timelag, na.rm = T), 1),
+            min_timelag_mins = round(min(timelag, na.rm = T), 1),
             n_locs = n()
           ) |> 
-          mutate(file = fname)
+          mutate(file = fname) 
         
       }) |> 
       bind_rows() |> 
@@ -217,8 +218,8 @@ find_tracks_to_exclude <- function(
 
 original_tracks <- original_tracks |>  
   mutate(
-    row_id = str_c("row_", 1:n()),
-    excluded = "no"
+    row_id = str_c("row_", 1:n())
+    #excluded = "no"
   ) |>
   group_split(species, individual_local_identifier) |> 
   map(~{
@@ -233,9 +234,7 @@ original_tracks <- original_tracks |>
         )
       
       ind_df <- ind_df |> 
-        mutate(
-          excluded = if_else(row_id %in% rows_to_exclude, "yes", excluded)
-        )
+        mutate(dup_ind_to_exclude = row_id %in% rows_to_exclude)
       
     }
     
@@ -256,9 +255,7 @@ original_tracks <- original_tracks |>
         )
       
       tag_df <- tag_df |> 
-        mutate(
-          excluded = if_else(row_id %in% rows_to_exclude, "yes", excluded)
-        )
+        mutate(dup_tag_to_exclude = row_id %in% rows_to_exclude)
       
     }
     
@@ -266,7 +263,12 @@ original_tracks <- original_tracks |>
   }
   ) |> 
   bind_rows() |> 
-  mutate(script_ran_on = Sys.time())
+  mutate(
+    script_ran_on = Sys.time(), 
+    excluded = if_else(
+      dup_tag_to_exclude | dup_ind_to_exclude, "yes", "no", missing = "no"
+    )
+  ) 
 
 
 original_tracks |> 
