@@ -5,6 +5,11 @@
 
 # INFO --------------------------------------------------------------------
 
+# because some species were exhibiting extreme distances that repeat exactly, 
+# explored the manipulation comments, and excluded the deployments that said
+# [3] "animal owned by farm and may have been restricted in movement or transported for sale (see Deployment Comments)"
+#[4] "displacement"                                                                                                   
+#[5] "Displacement" 
 
 # 0 - packages and files --------------------------------------------------
 
@@ -37,9 +42,9 @@ ggraph_dir <- here("Data",  "Graphs")
 
 dcols <- c("study_id", "individual_id", "deployment_id", "species", "file")
 
-dep_df <- here("Data", "1_downloadable_studies_deployments.rds") |> 
+dep_df <- here("Data", "1_downloadable_studies_deployments_filtered.rds") |> 
   read_rds() |> 
-  select(any_of(dcols), sensor_type_ids) |> 
+  select(any_of(dcols), sensor_type_ids, manipulation_comments) |> 
   mutate(
     sensor = case_when(
       str_detect(sensor_type_ids, "sigfox") ~ "sigfox", 
@@ -47,28 +52,27 @@ dep_df <- here("Data", "1_downloadable_studies_deployments.rds") |>
       str_detect(sensor_type_ids, "argos") ~ "argos", 
       str_detect(sensor_type_ids, "gps") ~ "gps"
     )
-  ) 
-
+  ) |> 
+  mutate(
+    problematic_deployment = str_detect(
+        manipulation_comments, "restricted in movement|[Dd]isplacement"
+    )
+  )
 
 
 # 1 - Preparing data ------------------------------------------------------
 
 
-files <- tibble(
-  file = c(
+files <- c(
     "5a_all_tracks_one_loc_per_day_bursts.rds", 
     "5a_all_tracks_one_loc_per_day_morning_bursts.rds", 
     "5b_all_tracks_max_daily_distance.rds"
-  ),
-  name = c("one", "morning", "max")
   )
 
 dfs <- files |> 
-  group_split(file) |> 
   map(~{
     
-    fname <- .x$file
-    n_fix <- .x$name
+    fname <- .x
     
     target_sp |> 
       map(~{
@@ -80,7 +84,7 @@ dfs <- files |>
         track <- here(sp_dir, "5_distances", fname) |> 
           read_rds() 
         
-        if(n_fix == "max"){
+        if(str_detect(fname, "max")){
           
           track <- track |> 
             rename(t1_ = timestamp_1, t2_ = timestamp_2, sl_ = max_dist) |> 
@@ -115,49 +119,47 @@ dfs <- files |>
         track |> 
           left_join(sun_df, by = "row_id") |>
           mutate(
-            yearday = str_c(yday(date), "_", year(date)),
-            before_dawn = t1_ < day_start, 
             day_cycle = if_else(
               t1_ < day_start, 
               str_c(yday(date-1), "_", year(date-1)),
-              yearday
+              str_c(yday(date), "_", year(date))
             ),
             day_period = if_else(
               t1_ >= day_start & t1_ <= day_end, "day", "night"
-            ), 
-            day_id = str_c(day_cycle, "_", day_period)
+            )
+          ) |> 
+          mutate(dup_days = n() > 1, .by = c(file, day_cycle)) |> 
+          mutate(
+            day_id = if_else(
+              dup_days, str_c(day_cycle, "_", day_period), day_cycle
+              )
           ) |> 
           select(
             any_of(c(dcols, "day_id")),
             any_of(matches("^x[12]_$|^t[12]_$|^y[12]_$|^sl_$"))
           ) |> 
-          # rename_with(
-          #   ~str_c(., n_fix), 
-          #   any_of(matches("^x[12]_$|^t[12]_$|^y[12]_$|^sl_$"))
-          # ) |> 
           mutate(
             species = str_replace(sp, "_", " "), 
             file_id = str_remove_all(fname, "5[ab]_all_tracks_|_bursts|.rds") |> 
               str_replace_all("_", " "), 
             sl_ = as.numeric(sl_),
             sl_km = sl_/1000,
-            sl_log = log10(ifelse(sl_ == 0, sl_ + 1e-10, sl_)),
+            sl_log = log10(ifelse(sl_ == 0, sl_ + 1e-5, sl_)),
             month = month(t1_, label = T)
           ) |> 
           filter(!is.na(day_id)) 
         
       }) |> 
       bind_rows() |> 
-      left_join(dep_df)
+      left_join(dep_df) |> 
+      filter(is.na(problematic_deployment) | problematic_deployment == F) 
     
   }, .progress = T)
 
 
-# df <- dfs[[1]] |> 
-#   full_join(dfs[[2]]) |> 
-#   full_join(dfs[[3]]) 
-# 
-# rm(dfs, dep_df, files)
+
+rm(dep_df, files)
+
 
 
 # 2 - Distances vs. sensor type -------------------------------------------
@@ -255,6 +257,10 @@ dfs |>
 
 
 # 3 - Distances vs. months ------------------------------------------------
+
+
+
+# 3.1. subset for europe ------------------------------------------------------
 
 # chat gpt said this is the boundry box for europe,
 # added 5 more degrees for safety 
@@ -357,7 +363,7 @@ dfs |>
 
   
 
-# non-eu ------------------------------------------------------------------
+# 3.2. all tracks ---------------------------------------------------------
 
 
 dfs |> 
@@ -452,4 +458,128 @@ dfs |>
 
 
 
+# 4 - Different distances -----------------------------------------------------
+
+dfs <- dfs |>
+  map(~{
+    
+    file_id <- unique(.x$file_id)
+    
+    n_fix <- str_extract_all(file_id, "one|morning|max") |> 
+      unlist() |> 
+      str_c(collapse = "_")
+    
+    .x |> 
+      select(-file_id) |> 
+      rename_with(
+        ~str_c(str_remove(., "_$"), "_", n_fix),
+        any_of(matches("^x[12]_$|^t[12]_$|^y[12]_$|^sl_"))
+      )
+    
+  })
+
+df <- dfs[[1]] |> 
+  full_join(dfs[[2]]) |>
+  full_join(dfs[[3]])
+
+rm(dfs)
+
+df |> 
+  group_split(species) |> 
+  map(~{
+    
+    sp <- unique(.x$species)
+    
+    sp_dir <- here("Data", "Studies", str_replace(sp, " ", "_"))
+    
+    pmo <- .x |>
+      ggplot() +
+      geom_point(
+        aes(x = sl_km_max, y = sl_km_one),
+        color = "grey55", alpha = .6, na.rm = T
+      ) +
+      labs(
+        x = "step length [km] | daily max",
+        y = "step length [km] | one loc per day",
+        title = str_c(sp, "- daily distances | max vs. one loc per day")
+      ) +
+      theme_bw() 
+    # scale_x_continuous(label = ~custom_scientific(.x, fixed_exp = 3))
+    
+    ggsave(
+      here(sp_dir, "Graphs", "5c_steps_max_vs_one.pdf"),
+      width = 25,
+      units = "cm"
+    )
+    
+    pmo +
+      facet_wrap(~month, ncol = 3, scales = "free")
+    
+    ggsave(
+      here(sp_dir, "Graphs", "5c_steps_by_month_max_vs_one.pdf"),
+      height = 30,
+      units = "cm"
+    )
+    
+    pmom <-.x |>
+      ggplot() +
+      geom_point(
+        aes(x = sl_km_max, y = sl_km_one_morning),
+        color = "grey55", alpha = .6, na.rm = T
+      ) +
+      labs(
+        x = "step length [km] | daily max",
+        y = "step length [km] | one loc per day morning",
+        title = str_c(sp, "- daily distances | max vs. one loc per day")
+      ) +
+      theme_bw() 
+    # scale_x_continuous(label = ~custom_scientific(.x, fixed_exp = 3))
+    
+    ggsave(
+      here(sp_dir, "Graphs", "5c_steps_max_vs_morning.pdf"),
+      width = 25,
+      units = "cm"
+    )
+    
+    pmom + 
+      facet_wrap(~month, ncol = 3, scales = "free")
+    
+    ggsave(
+      here(sp_dir, "Graphs", "5c_steps_by_month_max_vs_morning.pdf"),
+      height = 30,
+      units = "cm"
+    )
+    
+    poom <- .x |>
+      ggplot() +
+      geom_point(
+        aes(x = sl_km_one, y = sl_km_one_morning),
+        color = "grey55", alpha = .6, na.rm = T
+      ) +
+      labs(
+        x = "step length [km] | one loc per day",
+        y = "step length [km] | one loc per day morning",
+        title = str_c(sp, "- daily distances | one loc per day vs. morning")
+      ) +
+      theme_bw() 
+    # scale_x_continuous(label = ~custom_scientific(.x, fixed_exp = 3))
+    
+    ggsave(
+      here(sp_dir, "Graphs", "5c_steps_one_vs_morning.pdf"),
+      width = 25,
+      units = "cm"
+    )
+    
+    poom + 
+      facet_wrap(~month, ncol = 3, scales = "free")
+    
+    ggsave(
+      here(sp_dir, "Graphs", "5c_steps_by_month_one_vs_morning.pdf"),
+      height = 30,
+      units = "cm"
+    )
+    
+    
+  })
+  
 
