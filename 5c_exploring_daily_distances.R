@@ -37,7 +37,7 @@ ggraph_dir <- here("Data",  "Graphs")
 
 dcols <- c("study_id", "individual_id", "deployment_id", "species", "file")
 
-dep_df <- here("Data", "1_downloadable_studies_deployments_filtered.rds") |> 
+dep_df <- here("Data", "1_downloadable_studies_deployments.rds") |> 
   read_rds() |> 
   select(any_of(dcols), sensor_type_ids) |> 
   mutate(
@@ -51,7 +51,7 @@ dep_df <- here("Data", "1_downloadable_studies_deployments_filtered.rds") |>
 
 
 
-# checking the origin of different distances ------------------------------
+# 1 - Preparing data ------------------------------------------------------
 
 
 files <- tibble(
@@ -128,16 +128,23 @@ dfs <- files |>
             day_id = str_c(day_cycle, "_", day_period)
           ) |> 
           select(
-            any_of(c(dcols, "day_id"))
+            any_of(c(dcols, "day_id")),
             any_of(matches("^x[12]_$|^t[12]_$|^y[12]_$|^sl_$"))
           ) |> 
-          rename_with(
-            ~str_c(., n_fix), 
-            any_of(matches("^x[12]_$|^t[12]_$|^y[12]_$|^sl_$"))
+          # rename_with(
+          #   ~str_c(., n_fix), 
+          #   any_of(matches("^x[12]_$|^t[12]_$|^y[12]_$|^sl_$"))
+          # ) |> 
+          mutate(
+            species = str_replace(sp, "_", " "), 
+            file_id = str_remove_all(fname, "5[ab]_all_tracks_|_bursts|.rds") |> 
+              str_replace_all("_", " "), 
+            sl_ = as.numeric(sl_),
+            sl_km = sl_/1000,
+            sl_log = log10(ifelse(sl_ == 0, sl_ + 1e-10, sl_)),
+            month = month(t1_, label = T)
           ) |> 
-          mutate(species = str_replace(sp, "_", " ")) |> 
           filter(!is.na(day_id)) 
-          # mutate(idd = str_c(study_id, individual_id, deployment_id, species, day_id, sep = "_"))
         
       }) |> 
       bind_rows() |> 
@@ -146,154 +153,302 @@ dfs <- files |>
   }, .progress = T)
 
 
-df <- dfs[[1]] |> 
-  full_join(dfs[[2]]) |> 
-  full_join(dfs[[3]]) 
+# df <- dfs[[1]] |> 
+#   full_join(dfs[[2]]) |> 
+#   full_join(dfs[[3]]) 
+# 
+# rm(dfs, dep_df, files)
 
 
+# 2 - Distances vs. sensor type -------------------------------------------
 
 
-step_df |> 
-  ggplot() +
-  geom_boxplot(
-    aes(x = step, y = sensor, group = sensor),  
-    fill = "gray66", color = "black"
-  ) +
-  facet_wrap(~ species, ncol = 1, scales = "free") +
-  labs(
-    x = "step length [m]", 
-    title = "Tracks subset - one location per day | different sensors"
-  ) +
-  theme_bw() +
-  scale_x_continuous(label = ~custom_scientific(.x, fixed_exp = 3))
-
-
-ggsave(
-  here(ggraph_dir, "5a_one_loc_per_day_steps_box_sensors.pdf"), 
-  units = "cm"
-)
-
-step_df |> 
-  group_split(species) |> 
+dfs |> 
   map(~{
     
-    sp <- unique(.x$species)
+    df <- .x
     
-    sp_dir <- here("Data", "Studies", str_replace(sp, " ", "_"))
+    f_id <- unique(df$file_id)
     
-    .x |> 
+    pn <- str_c("5c_sensors_", str_replace_all(f_id, " ", "_"), ".pdf")
+    pn_l <- str_c("5c_sensors_", str_replace_all(f_id, " ", "_"), "_log.pdf")
+    pn_b <- str_c("5c_sensors_", str_replace_all(f_id, " ", "_"), "_box.pdf")
+    
+    # overview plot-------------------------------------------------------------
+    
+    df |> 
       ggplot() +
-      geom_histogram(
-        aes(x = step),  
+      geom_boxplot(
+        aes(x = sl_km, y = sensor, group = sensor),  
         fill = "gray66", color = "black"
       ) +
-      facet_wrap(~ sensor, ncol = 1, scales = "free") +
+      facet_wrap(~species, ncol = 1, scales = "free") +
       labs(
-        x = "step length [m]", 
-        title = str_c(sp, "- one location per day | different sensors")
+        x = "step length [km] | binwidth = 1", 
+        title = paste("Distances -", f_id,"| different sensors")
       ) +
-      theme_bw() +
-      scale_x_continuous(label = ~custom_scientific(.x, fixed_exp = 3))
+      theme_bw()
+    #scale_x_continuous(label = ~custom_scientific(.x, fixed_exp = 3))
+    
     
     ggsave(
-      here(sp_dir, "Graphs", "5a_one_loc_per_day_steps_sensors.pdf"), 
+      here(ggraph_dir, pn_b), 
+      height = 15, 
       units = "cm"
     )
     
+    # plots per species---------------------------------------------------------
+    df |> 
+      group_split(species) |> 
+      map(~{
+        
+        sp <- unique(.x$species)
+        
+        sp_dir <- here("Data", "Studies", str_replace(sp, " ", "_"))
+        
+        .x |> 
+          ggplot() +
+          geom_histogram(
+            aes(x = sl_km),  
+            fill = "gray66", color = "black", 
+            binwidth = 1
+          ) +
+          facet_wrap(~sensor, ncol = 1, scales = "free") +
+          labs(
+            x = "step length [km] | binwidth = 1km", 
+            title = paste(sp, "-", f_id, "| different sensors")
+          ) +
+          theme_bw()
+          #scale_x_continuous(label = ~custom_scientific(.x, fixed_exp = 3))
+        
+        ggsave(
+          here(sp_dir, "Graphs", pn), 
+          units = "cm"
+        )
+        
+        .x |> 
+          ggplot() +
+          geom_histogram(
+            aes(x = sl_log),  
+            fill = "gray66", color = "black", 
+            bins = 100
+          ) +
+          facet_wrap(~sensor, ncol = 1, scales = "free") +
+          labs(
+            x = "step length [m] - log scale | bins = 100", 
+            title = paste(sp, "-", f_id, "| different sensors")
+          ) +
+          theme_bw()
+        #scale_x_continuous(label = ~custom_scientific(.x, fixed_exp = 3))
+        
+        ggsave(
+          here(sp_dir, "Graphs", pn_l), 
+          units = "cm"
+        )
+        
+      })
+    
+   
+    
   })
 
 
-step_df |> 
-  group_split(species) |> 
+
+# 3 - Distances vs. months ------------------------------------------------
+
+# chat gpt said this is the boundry box for europe,
+# added 5 more degrees for safety 
+# Latitude range: 34.8° N to 71.2° N
+# Longitude range: -31.3° W to 69.1° E
+eu_bb <- st_as_sfc(
+  st_bbox(c(xmin = -25, xmax = 75, ymax = 30, ymin = 75), crs = st_crs(4326))
+)
+
+dfs |> 
   map(~{
     
-    sp <- unique(.x$species)
+    df <- .x |> 
+      st_as_sf(coords = c("x1_", "y1_"), crs = st_crs(4326)) |>
+      filter(as.vector(st_intersects(geometry, eu_bb, sparse = FALSE)))
+
+
+    f_id <- unique(df$file_id)
+
+    pn <- str_c("5c_eu_months_", str_replace_all(f_id, " ", "_"), ".pdf")
+    pn_l <- str_c("5c_eu_months_", str_replace_all(f_id, " ", "_"), "_log.pdf")
+    pn_b <- str_c("5c_eu_months_", str_replace_all(f_id, " ", "_"), "_box.pdf")
     
-    sp_dir <- here("Data", "Studies", str_replace(sp, " ", "_"))
-    
-    .x |> 
-      mutate(month = month(t1_)) |> 
+    # overview plot-------------------------------------------------------------
+    df |>
       ggplot() +
-      geom_histogram(
-        aes(x = step),  
+      geom_boxplot(
+        aes(x = sl_km, y = species),
         fill = "gray66", color = "black"
       ) +
-      facet_wrap(~ month, ncol = 3, scales = "free") +
+      facet_wrap(~month, ncol = 2, scales = "free") +
       labs(
-        x = "step length [m]", 
-        title = str_c(sp, " - one location per day | different sensors")
-      ) +
-      theme_bw() +
-      scale_x_continuous(label = ~custom_scientific(.x, fixed_exp = 3))
-    
-    ggsave(
-      here(sp_dir, "Graphs", "5a_one_loc_per_day_steps_months.pdf"), 
-      units = "cm", 
-      height = 15
-    )
-    
-  })
-
-
-
-
-
-step_df |> 
-  mutate(step_log = log10(ifelse(step == 0, step + 1e-10, step))) |> 
-  group_split(species) |> 
-  map(~{
-    
-    sp <- unique(.x$species)
-    
-    sp_dir <- here("Data", "Studies", str_replace(sp, " ", "_"))
-    
-    .x |> 
-      mutate(month = month(t1_)) |> 
-      ggplot() +
-      geom_histogram(
-        aes(x = step_log), 
-        bins = 100, 
-        fill = "gray66", color = "black"
-      ) +
-      facet_wrap(~ month, ncol = 3, scales = "free_y") +
-      labs(
-        x = "step length [m] - log scale | bins = 100",
-        title = str_c(sp, " - one location per day")
+        x = "step length [km]",
+        title = paste("Distances |", f_id, "| Europe, across months"),
       ) +
       theme_bw()
     
     ggsave(
-      here(sp_dir, "Graphs", "5a_one_loc_per_day_steps_months_log.pdf"), 
-      units = "cm", 
-      height = 15
+      here(ggraph_dir, pn_b),
+      units = "cm",
+      height = 30
     )
+    
+    
+    # graphs by species---------------------------------------------------------
+
+    df |>
+      group_split(species) |>
+      map(~{
+
+        sp <- unique(.x$species)
+
+        sp_dir <- here("Data", "Studies", str_replace(sp, " ", "_"))
+
+        .x |>
+          ggplot() +
+          geom_histogram(
+            aes(x = sl_km),
+            fill = "gray66", color = "black",
+            binwidth = 1
+          ) +
+          facet_wrap(~month, ncol = 3, scales = "free") +
+          labs(
+            x = "step length [km] | binwidth = 1km",
+            title = paste(sp, "-", f_id, "| Europe, across months")
+          ) +
+          theme_bw() 
+          # scale_x_continuous(label = ~custom_scientific(.x, fixed_exp = 3))
+
+        ggsave(
+          here(sp_dir, "Graphs", pn),
+          width = 25,
+          units = "cm"
+        )
+
+        .x |>
+          ggplot() +
+          geom_histogram(
+            aes(x = sl_log),
+            fill = "gray66", color = "black",
+            bins = 100
+          ) +
+          facet_wrap(~month, ncol = 3, scales = "free") +
+          labs(
+            x = "step length [m] - log scale | bins = 100",
+            title = paste(sp, "-", f_id, "| Europe, across months")
+          ) +
+          theme_bw()
+
+        ggsave(
+          here(sp_dir, "Graphs", pn_l),
+          width = 25,
+          units = "cm"
+        )
+        
+      })
     
   })
 
 
+  
+
+# non-eu ------------------------------------------------------------------
 
 
-
-step_df |> 
-  mutate(month = month(t1_)) |> 
-  ggplot() +
-  geom_boxplot(
-    aes(x = step, y = species),  
-    fill = "gray66", color = "black"
-  ) +
-  facet_wrap(~month, ncol = 3, scales = "free") +
-  labs(
-    x = "step length [m]", 
-    title = "Distances by month - one location per day"
-  ) +
-  theme_bw() +
-  scale_x_continuous(label = ~custom_scientific(.x, fixed_exp = 3))
-
-ggsave(
-  here(ggraph_dir, "5a_one_loc_per_day_steps_months_boxplot.pdf"), 
-  units = "cm", 
-  height = 30
-)
+dfs |> 
+  map(~{
+    
+    df <- .x 
+    
+    
+    f_id <- unique(df$file_id)
+    
+    pn <- str_c("5c_months_", str_replace_all(f_id, " ", "_"), ".pdf")
+    pn_l <- str_c("5c_months_", str_replace_all(f_id, " ", "_"), "_log.pdf")
+    pn_b <- str_c("5c_months_", str_replace_all(f_id, " ", "_"), "_box.pdf")
+    
+    # overview plot-------------------------------------------------------------
+    
+   
+    df |>
+      ggplot() +
+      geom_boxplot(
+        aes(x = sl_km, y = species),
+        fill = "gray66", color = "black"
+      ) +
+      facet_wrap(~month, ncol = 2, scales = "free") +
+      labs(
+        x = "step length [km]",
+        title = paste("Distances |", f_id, "| across months"),
+      ) +
+      theme_bw()
+    
+    ggsave(
+      here(ggraph_dir, pn_b),
+      units = "cm",
+      height = 30
+    )
+    
+    
+    # graphs by species---------------------------------------------------------
+    
+    df |>
+      group_split(species) |>
+      map(~{
+        
+        sp <- unique(.x$species)
+        
+        sp_dir <- here("Data", "Studies", str_replace(sp, " ", "_"))
+        
+        .x |>
+          ggplot() +
+          geom_histogram(
+            aes(x = sl_km),
+            fill = "gray66", color = "black",
+            binwidth = 10
+          ) +
+          facet_wrap(~month, ncol = 3, scales = "free") +
+          labs(
+            x = "step length [km] | binwidth = 10km",
+            title = paste(sp, "-", f_id, "by month")
+          ) +
+          theme_bw() 
+        # scale_x_continuous(label = ~custom_scientific(.x, fixed_exp = 3))
+        
+        ggsave(
+          here(sp_dir, "Graphs", pn),
+          width = 25,
+          units = "cm"
+        )
+        
+        .x |>
+          ggplot() +
+          geom_histogram(
+            aes(x = sl_log),
+            fill = "gray66", color = "black",
+            bins = 100
+          ) +
+          facet_wrap(~month, ncol = 3, scales = "free") +
+          labs(
+            x = "step length [m] - log scale | bins = 100",
+            title = paste(sp, "-", f_id, "| across months")
+          ) +
+          theme_bw()
+        
+        ggsave(
+          here(sp_dir, "Graphs", pn_l),
+          width = 25,
+          units = "cm"
+        )
+        
+      })
+    
+  })
 
 
 
