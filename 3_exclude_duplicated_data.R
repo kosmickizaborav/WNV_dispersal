@@ -54,7 +54,7 @@ original_tracks <- target_sp |>
           mutate(
             across(contains("tag_"), as.character),
             tag_local_identifier = if_else(
-              is.na(tag_local_identifier),
+              is.na(tag_local_identifier), #all(is.na(tag_local_identifier))
               tag_id,
               tag_local_identifier
               )

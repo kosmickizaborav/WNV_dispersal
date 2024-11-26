@@ -202,7 +202,9 @@ deployments_filtered <- deployments |>
   # contains sensor type of interest
   filter(str_detect(sensor_type_ids, str_c(tags_ids, collapse = "|"))) |> 
   # no manipulation with tracked animals
-  filter(manipulation_type == "none" | is.na(manipulation_type)) |>
+  filter(
+    manipulation_type %in% c("none", "relocated") | is.na(manipulation_type)
+  ) |>
   select(any_of(c("species", "account", col_deploy)))
 
 
