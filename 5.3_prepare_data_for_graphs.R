@@ -33,7 +33,8 @@ target_sp <- here("Data", "1_downloadable_studies_deployments_filtered.csv") |>
 dist_files <- c(
   "5.1_all_tracks_one_loc_per_day_bursts.rds", 
   "5.1_all_tracks_one_loc_per_day_morning_bursts.rds", 
-  "5.2_all_tracks_max_daily_distance.rds"
+  "5.2_all_tracks_max_daily_distance.rds", 
+  "5.2_all_tracks_net_square_displacement.rds"
 )
 
 deploy_path <- here("Data", "1_downloadable_studies_deployments_filtered.rds")
@@ -48,7 +49,7 @@ sun_times <- c(start = "dawn", end = "dusk")
 # Longitude range: -31.3° W to 69.1° E
 # Define the bounding box for Europe correctly
 eu_xmin <- -25
-eu_xmax <- 75
+eu_xmax <- 70
 eu_ymin <- 30
 eu_ymax <- 75
 
@@ -66,7 +67,8 @@ eu_ymax <- 75
 #   st_as_sf(coords = c("x1_", "y1_"), crs = st_crs(4326)) |>
 #   mutate(europe = as.vector(st_intersects(geometry, eu_bb, sparse = FALSE)))
 
-
+studies <- here("Data", "1_downloadable_studies.csv") |> 
+  read_csv()
 
 # 1 - Prepare data --------------------------------------------------------
 
@@ -74,7 +76,9 @@ eu_ymax <- 75
 # deployment file, used to add information about manipulation and sensor types
 dep_df <- deploy_path |> 
   read_rds() |> 
-  select(any_of(dcols), sensor_type_ids, manipulation_comments) |> 
+  select(
+    any_of(dcols), sensor_type_ids, manipulation_comments, manipulation_type
+  ) |> 
   mutate(
     sensor = case_when(
       str_detect(sensor_type_ids, "sigfox") ~ "sigfox", 
@@ -84,10 +88,15 @@ dep_df <- deploy_path |>
     )
   ) |> 
   mutate(
-    problematic_deployment = str_detect(
-      manipulation_comments, "restricted in movement|[Dd]isplacement"
-    )
+    manipulation_type = case_when(
+      str_detect(manipulation_comments, "restricted") ~ "restricted", 
+      str_detect(manipulation_comments, "[Dd]isplacement") ~ "relocated", 
+      is.na(manipulation_type) ~ "none", 
+      .default = manipulation_type
+    ), 
+    study_site = if_else(study_id == 4043292285, "E4Warning", "other")
   )
+
 
 # preparing data frames for the plots
 target_sp |> 
@@ -121,10 +130,10 @@ target_sp |>
           mutate(row_id = track$row_id) |> 
           rename_with(~"day_start", all_of(sun_times[["start"]])) |>
           rename_with(~"day_end", all_of(sun_times[["end"]]))
-        # grouping days by light cycle
         
         track |> 
-          left_join(sun_df, by = "row_id") |>
+          select(-contains("day_")) |> 
+          left_join(sun_df, by = "row_id") |> 
           mutate(
             day_cycle = if_else(
               t1_ < day_start, 
@@ -152,16 +161,48 @@ target_sp |>
             sl_ = as.numeric(sl_),
             sl_km = sl_/1000,
             sl_log = log10(ifelse(sl_ == 0, sl_ + 1e-5, sl_)),
-            month = month(t1_, label = T)
+            month = month(t1_, label = T), 
+            season = case_when(
+              y1_ >= 0 & month %in% c("Dec", "Jan", "Feb") ~ "winter", 
+              y1_ >= 0 & month %in% c("Mar", "Apr", "May") ~ "spring", 
+              y1_ >= 0 & month %in% c("Jun", "Jul", "Aug") ~ "summer", 
+              y1_ >= 0 & month %in% c("Sep", "Oct", "Nov") ~ "autumn", 
+              y1_ < 0 & month %in% c("Dec", "Jan", "Feb") ~ "summer", 
+              y1_ < 0 & month %in% c("Mar", "Apr", "May") ~ "autumn", 
+              y1_ < 0 & month %in% c("Jun", "Jul", "Aug") ~ "winter", 
+              y1_ < 0 & month %in% c("Sep", "Oct", "Nov") ~ "spring"
+              ) |> 
+              factor(levels = c("winter", "spring", "summer", "autumn"))
           ) |> 
           filter(!is.na(day_id)) |> 
           left_join(
             dep_df, 
             by = c("study_id", "individual_id", "deployment_id", "species")
           ) |> 
-          filter(is.na(problematic_deployment) | problematic_deployment == F) |> 
+          # removing animals that were restricted
+          filter(manipulation_type != "restricted") |>
+          # removing field site 
           mutate(
-            in_europe = (x1_>eu_xmin & x1_<eu_xmax & y1_>eu_ymin & y1_<eu_ymax)
+            in_europe = (
+                x1_>= eu_xmin & x2_>= eu_xmin & 
+                x1_ <= eu_xmax & x1_ <= eu_xmax &
+                y1_ >= eu_ymin & y2_ >= eu_ymin &
+                y1_ <= eu_ymax & y2_ >= eu_ymin
+            ), 
+            # in case of our study site the data of sixfox improved 
+            # only after an antenna was put up in the park
+            study_site_comment = case_when(
+              study_site == "E4Warning" & 
+                t1_ >= as_datetime("13-11-2024", format = "%d-%m-%Y") & 
+                sensor == "sigfox" ~ "post-antenna", 
+              study_site == "E4Warning" & 
+                t1_ < as_datetime("13-11-2024", format = "%d-%m-%Y") &
+                sensor == "sigfox" ~ "pre-antenna", 
+              .default = NA
+            )
+          ) |>
+          filter(
+            study_site_comment == "post-antenna" | is.na(study_site_comment)
           ) |> 
           write_rds(here(sp_dir, "5_distances", fout))
         

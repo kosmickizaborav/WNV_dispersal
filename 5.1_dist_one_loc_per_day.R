@@ -272,8 +272,9 @@ target_sp |>
   })
 
 # Warning messages:
-#   1: Removed 9492 rows containing non-finite values (`stat_bin()`). 
-# 2: Removed 1183 rows containing non-finite values (`stat_bin()`). 
-# 3: Removed 681 rows containing non-finite values (`stat_bin()`). 
+#   1: Removed 9510 rows containing non-finite values (`stat_bin()`). 
+# 2: Removed 1242 rows containing non-finite values (`stat_bin()`). 
+# 3: Removed 684 rows containing non-finite values (`stat_bin()`). 
 # 4: Removed 195 rows containing non-finite values (`stat_bin()`). 
-# 5: Removed 991 rows containing non-finite values (`stat_bin()`). 
+# 5: Removed 1076 rows containing non-finite values (`stat_bin()`). 
+# 6: Removed 3 rows containing non-finite values (`stat_bin()`). 

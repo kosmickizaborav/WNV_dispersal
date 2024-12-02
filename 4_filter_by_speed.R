@@ -86,7 +86,7 @@ bird_speeds <- here("Alerstam_2007_supplement_table_extracted.xlsx")|>
     # genus = str_split_i(species, " ", 1)
   ) |> 
   summarise(max_speed = max(max_speed), .by = species) |> 
-  filter(species %in% target_sp) |>  
+  filter(species %in% target_sp)  |> 
   full_join(
     here("Bruderer_2001_extracted_from_paper.xlsx") |> 
       read_xlsx() |> 
@@ -221,9 +221,11 @@ rm(speed_species)
 
 # 3 - Filter speeds above the treshold ------------------------------------
 
-start_time <- Sys.time()
+# TIME TRACKING
+#start_time <- Sys.time()
 
-species_clean <- tracks_list |>
+# species_clean <- tracks_list |> # used for time tracking but gave up on that
+tracks_list |>
   group_split(species) |>
   map(~{
 
@@ -318,25 +320,27 @@ species_clean <- tracks_list |>
 
       }) # close map for files
     
-    tibble(
-      species = sp, 
-      compute_end_time = Sys.time()
-    ) 
+    print(paste(sp, "DONE!"))
+    
+    # TIME TRACKING
+    # tibble(
+    #   species = sp, 
+    #   compute_end_time = Sys.time()
+    # ) 
 
-  }) |> # close map for species
-  bind_rows() |> 
-  mutate(
-    compute_start_time = start_time, 
-    computing_time = compute_end_time - compute_start_time
-  ) 
+  }) # close map for species
+  # TIME TRACKING
+  # bind_rows() 
+  # mutate(
+  #   compute_start_time = start_time, 
+  #   computing_time = compute_end_time - compute_start_time
+  # ) 
 
 
 # 4 - Speed distribution after filtering ----------------------------------
 
 
 # get the speeds and turning angles for every species
-
-start_time <- Sys.time()
 
 
 target_sp |>
@@ -411,32 +415,33 @@ target_sp |>
   write_csv(here("Data", "Studies", "4_speed_quantiles_after_filtering.csv"))
   
 
-
-# There were 21 warnings (use warnings() to see them)
-# > warnings()
 # Warning messages:
-#   1: Removed 428 rows containing non-finite values (`stat_bin()`).
-# 2: Removed 19292 rows containing non-finite values (`stat_bin()`).
-# 3: Removed 23 rows containing non-finite values (`stat_bin()`).
-# 4: Removed 762 rows containing non-finite values (`stat_bin()`).
-# 5: Removed 273 rows containing non-finite values (`stat_bin()`).
-# 6: Removed 13557 rows containing non-finite values (`stat_bin()`).
-# 7: Removed 212 rows containing non-finite values (`stat_bin()`).
-# 8: Removed 711 rows containing non-finite values (`stat_bin()`).
-# 9: Removed 611 rows containing non-finite values (`stat_bin()`).
-# 10: Removed 1788 rows containing non-finite values (`stat_bin()`).
-# 11: In max.default(structure(NA_real_, units = structure(list( ...
-# no non-missing arguments to max; returning -Inf
-# 12: Removed 427 rows containing non-finite values (`stat_bin()`).
-# 13: Removed 19235 rows containing non-finite values (`stat_bin()`).
-# 14: Removed 23 rows containing non-finite values (`stat_bin()`).
-# 15: Removed 762 rows containing non-finite values (`stat_bin()`).
-# 16: Removed 272 rows containing non-finite values (`stat_bin()`).
-# 17: Removed 13503 rows containing non-finite values (`stat_bin()`).
-# 18: Removed 207 rows containing non-finite values (`stat_bin()`).
-# 19: Removed 694 rows containing non-finite values (`stat_bin()`).
-# 20: Removed 578 rows containing non-finite values (`stat_bin()`).
-# 21: Removed 1719 rows containing non-finite values (`stat_bin()`).
+# 1: Removed 1 rows containing non-finite values (`stat_bin()`).
+# 2: Removed 2 rows containing non-finite values (`stat_bin()`).
+# 3: Removed 436 rows containing non-finite values (`stat_bin()`).
+# 4: Removed 19308 rows containing non-finite values (`stat_bin()`).
+# 5: Removed 21 rows containing non-finite values (`stat_bin()`).
+# 6: Removed 696 rows containing non-finite values (`stat_bin()`).
+# 7: Removed 2622 rows containing non-finite values (`stat_bin()`).
+# 8: Removed 221380 rows containing non-finite values (`stat_bin()`).
+# 9: Removed 247 rows containing non-finite values (`stat_bin()`).
+# 10: Removed 940 rows containing non-finite values (`stat_bin()`).
+# 11: Removed 617 rows containing non-finite values (`stat_bin()`).
+# 12: Removed 1802 rows containing non-finite values (`stat_bin()`).
+# 13: In max.default(structure(NA_real_, units = structure(list( ... :
+#   no non-missing arguments to max; returning -Inf
+# 14: Removed 1 rows containing non-finite values (`stat_bin()`).
+# 15: Removed 2 rows containing non-finite values (`stat_bin()`).
+# 16: Removed 435 rows containing non-finite values (`stat_bin()`).
+# 17: Removed 19251 rows containing non-finite values (`stat_bin()`).
+# 18: Removed 21 rows containing non-finite values (`stat_bin()`).
+# 19: Removed 696 rows containing non-finite values (`stat_bin()`).
+# 20: Removed 2617 rows containing non-finite values (`stat_bin()`).
+# 21: Removed 221138 rows containing non-finite values (`stat_bin()`).
+# 22: Removed 242 rows containing non-finite values (`stat_bin()`).
+# 23: Removed 921 rows containing non-finite values (`stat_bin()`).
+# 24: Removed 583 rows containing non-finite values (`stat_bin()`).
+# 25: Removed 1731 rows containing non-finite values (`stat_bin()`).
 
 
 # Function for speeds, slows down -----------------------------------------

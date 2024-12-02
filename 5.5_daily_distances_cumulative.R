@@ -24,6 +24,7 @@ library(here)
 library(sf)
 library(ggpubr)
 library(patchwork)
+library(paletteer)
 
 source("0_helper_functions.R")
 
@@ -42,119 +43,53 @@ idcols <- c(
 ggraph_dir <- here("Data",  "Graphs")
 
 
-# 2 - Graph functions -----------------------------------------------------
-
-hist_km <- function(
-    df, col_km = sl_km, binw = 10, fill = in_europe, 
-    f = "#9BB655FF", c = "gray22"
-    ){
-  
-  df |> 
-    ggplot() +
-    geom_histogram(
-      aes(x = {{col_km}}, fill = in_europe), 
-      binwidth = binw, 
-      position = "dodge2",
-      #fill = f, 
-      color = c
-    ) +
-    labs(x = str_c("step length [km] | binwidth = ", binw, "km")) +
-    theme_bw()
-
-}
-
-hist_log <- function(
-    df, col_log = sl_log, nbin = 100, f = "#9BB655FF",fill = in_europe, c = "gray22"
-    ){
-  
-  df |> 
-    ggplot() +
-    geom_histogram(
-      aes(x = {{col_log}}, fill = {{fill}}), 
-      bins = nbin, 
-      #fill = f, 
-      color = c
-    ) +
-    labs(x = str_c("step length [m] - log scale | bins = ", {{nbin}})) +
-    theme_bw()
-  
-}
-
-d_vs_d <- function(df, x, y, xlab = NA, ylab = NA, c = "#9BB655FF", a = .6){
-  
-  if(is.na(xlab) & is.na(ylab)){
-    
-    xlab <- deparse(substitute(x))
-    ylab <- deparse(substitute(y))
-    
-  } else {
-    
-    xlab <- xlab
-    ylab <- ylab
-    
-  }
-  
-  glabs <- tibble(x = xlab, y = ylab) |>
-    mutate(
-      across(
-        everything(),
-        ~str_replace_all(str_remove(.x, "sl_"), "_", " ")
-      )
-    ) |>
-    mutate(
-      across(
-        everything(),
-        ~case_when(
-          grepl("km", .x) ~ paste(str_remove(.x, "km "), "| step length [km]"),
-          grepl("log", .x) ~ paste(str_remove(.x, "log "), "| step length [m] - log scale")
-        )
-      )
-    )
-    
-  df |>
-    ggplot() +
-    geom_point(
-      aes(x = {{x}}, y = {{y}}),
-      color = c, alpha = a, na.rm = T
-    ) +
-    labs(x = glabs$x, y = glabs$y) +
-    theme_bw()
-  
-}
-
-box_km <- function(
-    df, col_km = sl_km, y = species, f = "#9BB655FF", c = "gray22", violin = F
-){
-  
-  if(violin == T){
-    
-    df |> 
-      ggplot(aes(x = {{col_km}}, y = {{y}}, group = {{y}})) +
-      geom_violin(trim = F, fill = f, color = c) +
-      geom_boxplot(width=0.1) +
-      labs(x = "step length [km]") +
-      theme_bw()
-    
-  } else{
-    
-    df |> 
-      ggplot(aes(x = {{col_km}}, y = {{y}}, group = {{y}})) +
-      geom_boxplot(fill = f, color = c) +
-      # geom_violin(trim = F, fill = f, color = c) +
-      # geom_boxplot(width=0.1) +
-      labs(x = "step length [km]") +
-      theme_bw()
-  }
-  
-}
-
 
 # 3 - Distances overview --------------------------------------------------
+
+
+dist_files <- c(
+  "5.3_all_tracks_one_loc_per_day_bursts_graph_data.rds", 
+  "5.3_all_tracks_one_loc_per_day_morning_bursts_graph_data.rds", 
+  "5.3_all_tracks_max_daily_distance_graph_data.rds"
+  # "5.3_all_tracks_net_square_displacement_graph_data.rds"
+  )
 
 graphs <- c(
   "5.4_comparison_daily_distances.pdf",
   "5.4_europe_comparison_daily_distances.pdf"
 )
+
+dist_files |> 
+  map(~{
+    fname <- .x
+    
+    df <- target_sp |> 
+      map(~{
+        
+        sp <- .x
+        sp_dir <- here("Data", "Studies", sp)
+        
+        here(sp_dir, "5_distances", fname) |> 
+          read_rds() |> 
+          mutate(species = str_replace(sp, " ", "_"))
+      }) |> 
+      bind_rows()
+    
+    df |> 
+      ggplot() + 
+      stat_ecdf(
+        aes(x = sl_km, color = species, linetype = manipulation_type), 
+        geom = "step"
+      ) +
+      theme_bw() + 
+      facet_wrap(~season, scales = "free", ncol = 1) +
+      scale_colour_paletteer_d("awtools::ppalette")  + 
+      labs(
+        title = "One location per day", 
+        x = "step length [km]"
+      )
+    
+  })
 
 target_sp |> 
   map(~{
@@ -171,6 +106,22 @@ target_sp |>
           read_rds() 
       }) |> 
       bind_rows()
+    
+    df_all |> 
+      filter(file_id != "net sqare displacement") |> 
+      ggplot() + 
+      stat_ecdf(
+        aes(x = sl_km, color = file_id, linetype = in_europe), 
+        geom = "step"
+      ) +
+      theme_bw() + 
+      facet_grid(~season, scales = "free") +
+      scale_colour_paletteer_d("awtools::ppalette")  + 
+      labs(
+        title = "One location per day", 
+        x = "step length [km]", 
+        color = "distance type"
+      )
     
     # printing graphs with all the data and with subset for europe
     graphs |> 
@@ -213,6 +164,9 @@ target_sp |>
     
   })
 
+
+df_all |> 
+ 
 
 # 4 - Distances vs. sensors -----------------------------------------------
 

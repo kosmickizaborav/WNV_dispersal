@@ -205,7 +205,7 @@ deployments_filtered <- deployments |>
   filter(
     manipulation_type %in% c("none", "relocated") | is.na(manipulation_type)
   ) |>
-  select(any_of(c("species", "account", col_deploy)))
+  select(any_of(c("species", "account", "error_text", col_deploy)))
 
 
 # saving in two formats, so that when/if needed to be reloaded for download 
@@ -214,9 +214,9 @@ deployments_filtered <- deployments |>
 deployments_filtered |> 
   write_rds(here("Data", "1_downloadable_studies_deployments_filtered.rds"))
 
-deployments_filtered |> 
-  as_tibble() |> 
-  write_csv(here("Data", "1_downloadable_studies_deployments_filtered.csv"))
+# deployments_filtered |> 
+#   as_tibble() |> 
+#   write_csv(here("Data", "1_downloadable_studies_deployments_filtered.csv"))
 
 rm(deployments)
 
@@ -238,10 +238,10 @@ rm(deployments)
 # 2 - Downloading studies per species -------------------------------------
 
 # I first downloaded deployments, and the day after I ran the following code
-# deployments_filtered <- here(
-#   "Data", "1_downloadable_studies_deployments_filtered.rds"
-#   ) |>
-#   read_rds()
+deployments_filtered <- here(
+  "Data", "1_downloadable_studies_deployments_filtered.rds"
+  ) |>
+  read_rds()
 
 # 2.1. Creating folder for each species ----------------------------------
 
@@ -351,15 +351,19 @@ download_report <- deployments_filtered |>
       
       df <- res$result
       
+      
       if(!is.null(df)){
         
         # add additional deployment information
         df <- df |>
-          left_join(deployment_info)
+          left_join(deployment_info) |> 
+          filter(!is.na(individual_id))
         
         df |>
           group_split(deployment_id) |>
           map(~{
+            
+            
             
             depl_id <- unique(.x$deployment_id)
             ind_id <- unique(.x$individual_id)
@@ -371,7 +375,7 @@ download_report <- deployments_filtered |>
             )
             
             .x |>
-              write_rds(file = here(sp_dir, study_file))
+              write_rds(here(sp_dir, study_file))
             
             print("----------------------saved!------------------------")
             
@@ -382,6 +386,7 @@ download_report <- deployments_filtered |>
               individual_local_identifier = ind_local,
               individual_id = ind_id,
               deployment_id = depl_id,
+              n_locs = nrow(.x),
               account = account, 
               downloaded_at = Sys.time()
               # deploy_total = length(deployment_ids),
