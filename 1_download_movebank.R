@@ -17,7 +17,9 @@
 #' 
 #' **1.2. Downloading deployment info and filter**
 #' download deployment information from studies of interest. 
-#' done in this way because in study info sometimes there is no species specified.
+#' done in this way, even if it is much slower, 
+#' because in study info sometimes there is no species specified, 
+#' so to make sure to include all potential studies
 #' if download failed keep the error info
 #' >>> OUTPUT: downloadable_studies_deployments.csv
 # 
@@ -58,14 +60,14 @@ target_sp <- c(
   )
 
 # defining sensors of interest 
-# 
+# because they are written in different ways
 tags_ids <- c(
   "GPS", "Sigfox Geolocation", # sensor type ids from studies
   "gps", "sigfox-geolocation" # sensor type ids from deployments
   )
 
-
-# defining columns from deployment
+# list of columns that seemed to be relevant, selected by exploring the 
+# dataframe downladed from movebank using movebank_download_deployment()
 col_deploy <- c("taxon_canonical_name", "study_id", "deployment_id", 
                 "individual_id", "individual_local_identifier", 
                 "sensor_type_ids",
@@ -97,15 +99,14 @@ movebank_access <- list(
   sub2 = "kosmickizaborav"
 )
 
-if(!dir.exists(here("Data"))){
-  dir.create(here("Data"))
-}
+# create a directory where data will be downloaded
+if(!dir.exists(here("Data"))){ 
+  dir.create(here("Data")) 
+  dir.create(here("Data", "Studies"))
+  }
 
 
-# 1 - Checking available deployments --------------------------------------
-
-
-# 1.1. Accessing downloadable studies -------------------------------------
+# 1 - Check available studies ---------------------------------------------
 
 # checking downloadable studies and applying the filtering criteria
 
@@ -115,7 +116,8 @@ movebank_filtered <- movebank_access |>
     
     options("move2_movebank_key_name" = .x)
     
-    # get info only for the studies with the downlaod acess
+    # get info only for the studies with the download access, 
+    # using all available accounts
     movebank_download_study_info(i_have_download_access = TRUE) |> 
       mutate(account = .x)
     
@@ -123,12 +125,14 @@ movebank_filtered <- movebank_access |>
   bind_rows() |> 
   # at least one registered deployment
   filter(
-    as.numeric(number_of_deployed_locations) > 0 & !is.na(number_of_deployed_locations)
-  ) |>
+    as.numeric(number_of_deployed_locations) > 0 & 
+      !is.na(number_of_deployed_locations)
+  ) |> 
   # filter the sensors of interest
   filter(str_detect(sensor_type_ids, str_c(tags_ids, collapse = "|"))) |>
-  # filter out test deployments
-  filter(is_test != TRUE) |> 
+  # filter out test deployments, 
+  # no need to include is.na(is_test) because the values are just TRUE/FALSE
+  filter(is_test == F) |> 
   # eliminate the studies that can be downloaded by multiple accounts
   distinct(id, .keep_all = T) 
 
@@ -136,26 +140,55 @@ movebank_filtered |>
   write_csv(here("Data", "1_downloadable_studies.csv"))
 
 
-# 1.2. Downloading deployment info and filter -----------------------------
+# 2 - Download deployment info and filter  --------------------------------
 
 # accessing deployment information and filtering the deployments of interest
 
+# downloading available deployments from studies of interest
+# this is done first because in the study info in some cases there
+# is no species defined, so to make sure to include all potential studies
+
 # define a safe version of the function to handle errors
+# in case there was an error during download save it
 safe_deployment_download <- safely(~ {
   movebank_download_deployment(
     .x, 'license-md5' = '51d5f89ddc94971109e50a17eb14f8be'
     )
 })
 
-# downloading all available deployments from studies of interest
-# this is done first because in the study info in some cases there
-#  is no species defined
+# in order to avoid downloading all deployment information, 
+# we download only the deployments that contain either explicitly specified
+# target species or have some other generic specification such as 
+# "Animalia", NA value, or genus  
+
+taxon_list <- movebank_filtered |> 
+  filter(!is.na(taxon_ids)) |> 
+  pull(taxon_ids) |> 
+  str_split(",") |>
+  unlist() |> 
+  unique() 
+
+# !str_detect(str_squish(taxon_list), " "), this is used to differentiate 
+# from fully specified species and only genus, for the same reason needed to 
+# add $ at the end of the string, to distinguish species from genus
+# e.g. when using str_detect("Pelecanus "), it would include also
+# "Pelecanus onocrotalus", but since in that case the species is fully specified, 
+# we don't want to download the data, but only to check which species is exacly 
+# under the deployment marked as "Pelecanus $"
+taxon_filter <- str_c(
+  c(
+    str_c(taxon_list[!str_detect(str_squish(taxon_list), " ")], "$"), 
+    target_sp
+  ), 
+  collapse = "|"
+  )
+
+# deployment download
 deployments <- movebank_filtered |> 
-  filter(
-    sum(unlist(str_split(taxon_ids, ",")) %in% c(target_sp, "Animalia")) > 0 | 
-             is.na(taxon_ids)
-  ) |> 
-  distinct(id, account) |>  # Select distinct study IDs
+  # filter taxons of interest or unclear taxons
+  filter(str_detect(taxon_ids, taxon_filter) | is.na(taxon_ids)) |> 
+  # select distinct study IDs
+  distinct(id, account) |>  
   group_split(id) |> 
   map(~ {
     
@@ -164,7 +197,6 @@ deployments <- movebank_filtered |>
     options("move2_movebank_key_name" = acc)
     
     res <- safe_deployment_download(.x$id)
-    
     
     if (!is.null(res$result)) {  # if there are some results, keep them
       
@@ -175,7 +207,7 @@ deployments <- movebank_filtered |>
       
       tibble(
         study_id = .x$id, 
-        error_text = as.character(res$error), 
+        error_download_deployment = as.character(res$error), 
         account = acc
       ) 
       
@@ -184,20 +216,37 @@ deployments <- movebank_filtered |>
   }, 
   .progress = T
   ) |> 
-  bind_rows() |> 
-  rename(species = taxon_canonical_name) 
+  bind_rows()
 
 
 # saving the list of all deployments
 deployments |> 
   write_rds(here("Data", "1_downloadable_studies_deployments.rds"))
-  # write_csv(here("Data", "1_downloadable_studies_deployments.csv"))
 
+# remove study info, as it's not needed anymore
 rm(movebank_filtered)
 
 # filter deployments
 deployments_filtered <- deployments |> 
-  # contains species of interest
+  # wanted to keep the original taxon canonical name
+  mutate(species = taxon_canonical_name) |> 
+  # removing extra space just in case
+  mutate(
+    across(
+      any_of(c("taxon_canonical_name", "species", "taxon_detail")), str_squish
+    )
+  ) |> 
+  mutate(
+    species = case_when(
+      str_detect(species, " ") ~ species, 
+      # in case family is specified seems like taxon detail has the species
+      str_detect(species, "idae$|Aves") ~ str_to_sentence(taxon_detail),
+      # in case genus was specified
+      # seems like in taxon detail they put epitaph of the species
+      !str_detect(taxon_detail, " ") ~ str_to_sentence(paste(species, taxon_detail)),
+      .default = species
+    )
+  ) |>
   filter(species %in% target_sp) |> 
   # contains sensor type of interest
   filter(str_detect(sensor_type_ids, str_c(tags_ids, collapse = "|"))) |> 
@@ -205,54 +254,21 @@ deployments_filtered <- deployments |>
   filter(
     manipulation_type %in% c("none", "relocated") | is.na(manipulation_type)
   ) |>
-  select(any_of(c("species", "account", "error_text", col_deploy)))
+  select(
+    any_of(c("species", "account", "error_download_deployment", col_deploy))
+  )
 
-
-# saving in two formats, so that when/if needed to be reloaded for download 
-# we don't have incompatibility with data types 
-# (e.g. deployment id as double or integer64)
+# saving data
 deployments_filtered |> 
   write_rds(here("Data", "1_downloadable_studies_deployments_filtered.rds"))
 
-# deployments_filtered |> 
-#   as_tibble() |> 
-#   write_csv(here("Data", "1_downloadable_studies_deployments_filtered.csv"))
-
+# proceed only with filtered deployments
 rm(deployments)
 
-# warning x10:
-# Warning messages:                                  
-#   1: `vroom()` finds reading problems with the movebank specification.
-# ℹ This might relate to the returned data not fitting the expectation of
-#  the movebank data format specified in the package.
-# ℹ For retrieving the specific problem you can enable `global_entrace` 
-# using rlang::global_entrace() then run the command and use
-# `rlang::last_warnings()[[1]]$problems` to retrieve the problems.
-# ℹ The requested url can then be retrieved with:
-# `rlang::last_warnings()[[1]]$url`
-# ℹ Alternatively in some cases you might be able to retrieve the problems 
-# calling `vroom::problems()` on the result of the function call that
-# produced the warning. 
 
+# 3 - Create output directory for species with available data -------------
 
-# 2 - Downloading studies per species -------------------------------------
-
-# I first downloaded deployments, and the day after I ran the following code
-deployments_filtered <- here(
-  "Data", "1_downloadable_studies_deployments_filtered.rds"
-  ) |>
-  read_rds()
-
-# 2.1. Creating folder for each species ----------------------------------
-
-# creating directory for data download
-if(!dir.exists(here("Data", "Studies"))){
-  
-  dir.create(here("Data", "Studies"))
-  
-}
-
-# creating folder for every species that has downloadable data
+# create folder for every species that has downloadable data
 deployments_filtered |> 
   distinct(species) |> 
   as_vector() |>
@@ -263,23 +279,18 @@ deployments_filtered |>
     if(!dir.exists(sp_dir)) {
       
       sp_dir |> dir.create()
-       
-    }
-    
-    if(!dir.exists(here(sp_dir, "1_deployments"))){
       
       here(sp_dir, "1_deployments") |> dir.create()
-      
-    }
+       
+    } # close if dir.exists
     
-  }
-  )
+  }) # close map
 
-# 2.2 - Downloading deployments of interest --------------------------------
+
+# 4 - Download and save deployments ---------------------------------------
 
 # Define a custom function to handle multiple arguments and wrap with safely
 # sensor types: 653, 2299894820 - gps, sixfox
-
 study_download <- function(
     study_id = NULL, 
     individual_local_identifier = NULL, 
@@ -299,11 +310,12 @@ study_download <- function(
     ) 
   
 }
-
+# wraph with safely
 safe_study_download <- safely(study_download)
   
 # download studies 
 studies <- unique(deployments_filtered$study_id)
+lengs <- length(studies)
 
 download_report <- deployments_filtered |>
   group_split(study_id, individual_local_identifier) |>
@@ -311,36 +323,44 @@ download_report <- deployments_filtered |>
 
     deployment_info <- .x
     
-    sp <- unique(deployment_info$species) |> str_replace(" ", "_")
-    sp_dir <- here("Data", "Studies", sp, "1_deployments")
+    # folder where the data will be saved
+    sp <- unique(deployment_info$species) 
+    sp_dir <- here(
+      "Data", "Studies",  str_replace(sp, " ", "_"), "1_deployments"
+      )
     
-    account <- unique(deployment_info$account)
-
-    # specifying study and individual that we want to download
-    study_id <- unique(deployment_info$study_id)
-    
-    print(paste(sp, study_id, which(study_id == studies), "|", length(studies)))
-
-    ind_local <- unique(deployment_info$individual_local_identifier) |>
-      as.character()
-    
-    ind_id <- unique(deployment_info$individual_id) |>
-      bit64::as.integer64()
-
-    print(paste("individual:", ind_local))
-    
+    # check what deployments are already downloaded
     downloaded <- tibble(file = list.files(sp_dir)) |> 
       mutate(
         study_id = bit64::as.integer64(str_split_i(file, "_", 1)), 
         individual_id = bit64::as.integer64(str_split_i(file, "_", 3)), 
         deployment_id = bit64::as.integer64(str_split_i(file, "_", 5))
       ) 
+    
+    # account to use when downloading data
+    account <- unique(deployment_info$account)
 
+    # specifying study and individual that we want to download
+    study_id <- unique(deployment_info$study_id)
+    
+    print(paste(sp, which(study_id == studies), "|", lengs))
+
+    # getting individual ids
+    ind_local <- unique(deployment_info$individual_local_identifier) |>
+      as.character()
+    ind_id <- unique(deployment_info$individual_id) |>
+      bit64::as.integer64()
+
+    print(paste("individual:", ind_local))
+    
+    # check if the individual and study are already downloaded
     if(
       !(study_id %in% unique(downloaded$study_id) & 
-        ind_id %in% unique(downloaded$individual_id))
+        ind_id %in% unique(downloaded$individual_id)
+        )
       ){
       
+      # set account to use for download
       options("move2_movebank_key_name" = account)
       
       # download deployments of interest
@@ -351,7 +371,7 @@ download_report <- deployments_filtered |>
       
       df <- res$result
       
-      
+      # if there is some data to save
       if(!is.null(df)){
         
         # add additional deployment information
@@ -360,25 +380,28 @@ download_report <- deployments_filtered |>
           filter(!is.na(individual_id))
         
         df |>
+          # if there is multiple deployments per individual download them 
+          # to a separate file
           group_split(deployment_id) |>
           map(~{
             
-            
-            
             depl_id <- unique(.x$deployment_id)
-            ind_id <- unique(.x$individual_id)
+            # ind_id <- unique(.x$individual_id) already exists above
             
+            # define file name
             study_file <- str_c(
               study_id, "_study_",
               ind_id, "_ind_",
               depl_id, "_depl.rds"
             )
             
+            # save the data
             .x |>
               write_rds(here(sp_dir, study_file))
             
             print("----------------------saved!------------------------")
             
+            # save the basic information for download report
             tibble(
               species = sp,
               file = study_file,
@@ -389,35 +412,37 @@ download_report <- deployments_filtered |>
               n_locs = nrow(.x),
               account = account, 
               downloaded_at = Sys.time()
-              # deploy_total = length(deployment_ids),
-              # deploy_download = length(unique(df$deployment_id))
             )
             
           }) |>
           bind_rows()
         
         
-      } else {
+      } else { # if there is no data to save / error occurred!
         
         
         print("-----------------an error occurred!-----------------")
         
         # if there is error with download, save the info
-        # if there is error with download, save the info
         tibble(
+          species = sp, 
           study_id = study_id,
-          individual_local_identifier = ind_local, 
-          error_text = paste(res$error, collapse = " "), 
+          individual_local_identifier = ind_local,
+          individual_id = ind_id,
+          error_download_study = paste(res$error, collapse = " "), 
           account = account, 
           downloaded_at = Sys.time()
         )
         
       }
       
-    } else {
+    } else { # if individual and study are already downloaded 
       
       print("-----------------already downloaded!-----------------")
       
+      # keep the info from the downloade files for the report
+      
+      # filter the studies that are already downloaded
       study_file <- downloaded |> 
         filter(study_id == study_id & individual_id == ind_id)
       
@@ -429,9 +454,8 @@ download_report <- deployments_filtered |>
         individual_id = study_file$individual_id,
         deployment_id = study_file$deployment_id,
         account = account, 
-        downloaded_at = file.mtime(here(sp_dir, study_file$file))
-        # deploy_total = length(deployment_ids),
-        # deploy_download = length(unique(df$deployment_id))
+        downloaded_at = file.mtime(here(sp_dir, study_file$file)), 
+        already_downloadded = T
       )
       
     }
@@ -442,20 +466,20 @@ download_report <- deployments_filtered |>
   ) |> 
   bind_rows()
 
-
+# save the download report
 download_report |> 
   write_csv(here("Data", "Studies", "1_individuals_download_report.csv"))
 
 
-
 # There were 50 or more warnings (use warnings() to see the first 50)
 # 50: `vroom()` finds reading problems with the movebank specification.
-# ℹ This might relate to the returned data not fitting the expectation of the
-# movebank data format specified in the package.
-# ℹ For retrieving the specific problem you can enable `global_entrace` using
-# rlang::global_entrace() then run the command and use
+# ℹ This might relate to the returned data not fitting the expectation of the movebank data format specified in the package.
+# ℹ For retrieving the specific problem you can enable `global_entrace` using rlang::global_entrace() then run the command and use
 # `rlang::last_warnings()[[1]]$problems` to retrieve the problems.
 # ℹ The requested url can then be retrieved with: `rlang::last_warnings()[[1]]$url`
-# ℹ Alternatively in some cases you might be able to retrieve the problems\
-# calling `vroom::problems()` on the result of the function call that
-# produced the warning.
+# ℹ Alternatively in some cases you might be able to retrieve the problems calling `vroom::problems()` on the result of the function call
+# that produced the warning.
+
+# no download problems
+# check <- download_report |>
+#   filter(!is.na(error_download_study)) 

@@ -8,6 +8,7 @@ library(ggpubr)
 library(patchwork)
 library(move2)
 library(paletteer)
+library(amt)
 
 source("0_helper_functions.R")
 
@@ -32,6 +33,14 @@ target_sp |>
     if(!dir.exists(ddir)){ ddir |>  dir.create()}
     
   })
+
+dist_files <- c(
+  "5.3_all_tracks_one_loc_per_day_bursts_graph_data.rds", 
+  "5.3_all_tracks_one_loc_per_day_morning_bursts_graph_data.rds", 
+  "5.3_all_tracks_max_daily_distance_graph_data.rds"
+  # "5.3_all_tracks_net_square_displacement_graph_data.rds"
+)
+
 
 # col_id <- c("study_id", "deployment_id", "individual_id", 
 #             "individual_local_identifier",  "day_cycle", "species")
@@ -76,8 +85,7 @@ target_sp |>
     
     # subsetting each type of distance 
     # and merging them all in one file
-    dist_df <- here(sp_dir, "5_distances") |> 
-      list.files(pattern = "graph_data.rds") |> 
+    dist_df <- dist_files |> 
       map(~{
         
         here(sp_dir, "5_distances", .x) |> 
@@ -201,6 +209,9 @@ target_sp |>
       map(~{
         
         fname <- .x 
+        
+        print(fname)
+        
         fout <- fname |> 
           str_replace(".rds", ".pdf")
         

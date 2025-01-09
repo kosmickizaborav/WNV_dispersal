@@ -37,44 +37,73 @@ library(readxl)
 library(units)
 library(ggpubr)
 library(suncalc)
+library(rnaturalearth)
 
-#source("0_helper_functions.R")
-
-
-tracks_list <- here("Data", "Studies", "3_complete_deployment_list.rds") |> 
+tracks_list <- here("Data", "Studies", "3_deployment_duplicates_excluded.rds") |> 
   read_rds() |> 
-  filter(excluded == "no") |> 
-  mutate(
-    sp = str_replace(species, " ", "_"), 
-    file_path = here("Data", "Studies", sp, "2_cleaned", file)
-  )
+  filter(excluded == "no") 
 
 # getting species of interest
-target_sp <- tracks_list |> 
-  distinct(species) |> 
-  pull()
+target_sp <- tracks_list |>
+  distinct(species) |>
+  pull() 
+  # str_replace(" ", "_")
 
 
-# folder for the graphs output
+# 0 - 1 - Variables to add ------------------------------------------------
+
+# variables used in the section 4, to extract dawn and dusk times, and check 
+# where in the world the track is located
+
+# load world map for checking weather the track is in europe or elsewhere
+world <- ne_countries(scale = "medium", returnclass = "sf") |> 
+  select(sovereignt, admin, continent) |> 
+  rename(country = sovereignt, country_admin = admin)
+
+# europe ranges taken from: 
+# https://en.wikipedia.org/wiki/Extreme_points_of_Europe
+# Latitude: 34°N to 81°N
+# Longitude: 29°W to 69°E
+eu_coords <- list(
+  ymin = 34.0,
+  ymax = 81.0,
+  xmin = -29.0,
+  xmax = 69.0
+)
+
+# define times of the sun positions that will be included in the data
+sun_times <- c(
+  start = "dawn", end = "dusk", 
+  "nauticalDawn", "nauticalDusk", 
+  "night", "nightEnd"
+)
+
+# 1 - Create output directories -------------------------------------------
+
+# folder for filtered speed and graphs
 target_sp |> 
-  str_replace(" ", "_") |> 
   map(~{
     
-    if(!dir.exists(here("Data", "Studies", .x, "Graphs"))){
-      
-      dir.create(here("Data", "Studies", .x, "Graphs"))
-      
-    }
+    
+    sp_dir <- here("Data", "Studies", str_replace(.x, " ", "_"))
+    graphs_dir <- here(sp_dir, "Graphs")
+    speed_dir <- here(sp_dir, "4_filtered_speed")
+    
+    if(!dir.exists(graphs_dir)){ dir.create(graphs_dir) }
+
+    if(!dir.exists(speed_dir)){ dir.create(speed_dir) }
+    
   })
 
-sun_times <- c(start = "dawn", end = "dusk", "nauticalDawn", "nauticalDusk")
 
+# 2 -  Flight speed limits from literature --------------------------------
 
-# 1 -  Flight speed limits from literature --------------------------------
-
-
-# data is just loaded from literature 
-# the highest value was selected as a limit
+# data is loaded from literature: 
+# for "Alerstam_2007_supplement_table_extracted.xlsx" I direclty copied the
+# table provided in the supplementary (converting the pdf to excel using adobe), 
+# for the bruderer I copied manually the values for the target species
+# the highest value was selected as a limit and rounded up, so that 
+# we just have approximate limit, as decimals are too precise
 
 bird_speeds <- here("Alerstam_2007_supplement_table_extracted.xlsx")|> 
   read_xlsx(skip = 1) |> 
@@ -83,7 +112,6 @@ bird_speeds <- here("Alerstam_2007_supplement_table_extracted.xlsx")|>
   mutate(
     max_speed = if_else(is.na(sd), speed, speed + 2*sd), 
     species = str_squish(str_remove(species, "•"))
-    # genus = str_split_i(species, " ", 1)
   ) |> 
   summarise(max_speed = max(max_speed), .by = species) |> 
   filter(species %in% target_sp)  |> 
@@ -95,271 +123,257 @@ bird_speeds <- here("Alerstam_2007_supplement_table_extracted.xlsx")|>
     by = "species"
   ) |> 
   summarise(
-    speed_lim = max(c(max_speed_bruderer, max_speed), na.rm = T), 
+    speed_lim = ceiling(max(c(max_speed_bruderer, max_speed), na.rm = T)), 
     .by = species
   ) |> 
   mutate(speed_lim = set_units(speed_lim, m/s))
 
 
-# 2 - Speed distribution in data ------------------------------------------
+# 3 - Speed distribution before filtering ------------------------------------
 
 # get the speeds and turning angles for every species
 
-start_time <- Sys.time()
-
-speed_species <- tracks_list |>
-  select(file_path, species) |> 
+tracks_list |>
+  select(file, species) |> 
   group_split(species) |> 
   map(~{
-
-    file_paths <- .x |> pull(file_path)
     
-    lfp <- length(file_paths)
+    # getting all file paths per species
+    files <- .x |> pull(file)
+    lfl <- length(files)
     
-    sp_id <- unique(.x$species)
+    # species directory
+    sp <- unique(.x$species)
+    sp_dir <- here("Data", "Studies", str_replace(sp, " ", "_"))
 
 
-    file_paths |>
+    # 3 - 1 - Prepare data --------------------------------
+    
+    # getting data frame with all speeds from the species
+    speeds_df <- files |>
       map(~{
+        
+        fin <- .x 
+        
+        print(paste(sp, which(fin == files), "|", lfl))
 
-        print(paste(sp_id, which(.x == file_paths), "|", lfp))
-
-        track <- .x |>
+        track <- here(sp_dir, "2_cleaned", fin) |> 
           read_rds() 
         
+        # calculate speed and turn
         track |> 
           mutate(
             speed = mt_speed(track, units="m/s"), 
             turn = mt_turnangle(track)
           ) |> 
           as_tibble() |>
-          select(-event_id) |> 
-          select(contains(c("_id", "_identifier")), speed, turn) 
+          select(speed, turn) 
             
-            
-          }) |> 
-      bind_rows() |> 
-      mutate(
-        species = sp_id, 
-        compute_end_time = Sys.time(), 
-        compute_start_time = start_time
-      )
+        }) |> 
+      bind_rows()
     
-    }
-  ) 
+   
+    # 3 - 2 - Plot speeds and turns------------------------------
+    
+    # extracting the speed limit for the selected species (from the segment 1)
+    speed_limit <- bird_speeds |> 
+      filter(species == sp) |> 
+      pull() 
+    
+    # checking which quantile is lower then the defined speed limit
+    sp_limits_graph <- tibble(
+      speed = unname(quantile(speeds_df$speed, seq(0.95, 1, 0.001), na.rm = T)), 
+      name = str_c(seq(95, 100, 0.1), "% quantile")
+      ) |> 
+      filter(speed <= speed_limit) |> 
+      filter(as.numeric(speed) <= as.numeric(speed_limit)) |> 
+      arrange(speed) |> 
+      slice_tail(n = 1) |> 
+      bind_rows(tibble(speed = speed_limit, name = "applied speed limit")) |> 
+      mutate(text = str_c(name, ": ", round(speed, 2), " m/s"))
 
-
-# plotting speed and turning angles before filtering
-speed_species |> 
-  map(~{
+    # plot the graphs of speeds and turning angles
+    ps <- speeds_df |> 
+      filter(!is.na(speed)) |> 
+      ggplot() +
+      geom_histogram(
+        aes(speed), fill = "grey55", color = "black"
+      ) +
+      geom_vline(
+        data = sp_limits_graph, 
+        mapping = aes(xintercept = speed, color = text), 
+        linewidth = 1.2
+      ) +
+      labs(x = "speed", color = "") +
+      theme_bw() +
+      theme(legend.position = "bottom")
     
-    sp_id <- unique(.x$species)
-    
-    out_dir <- here("Data", "Studies", str_replace(sp_id, " ", "_"), "Graphs")
-    
-    ps <- ggplot(.x) +
-      geom_histogram(aes(speed), fill = "grey55", color = "black")+ #, binwidth = 10
-      theme_bw()
-    
-    pta <- ggplot(.x) +
-      geom_histogram(aes(turn), fill = "grey55", color = "black") + # binwidth = 0.1) +
+    pta <- speeds_df |> 
+      filter(!is.na(turn)) |> 
+      ggplot() +
+      geom_histogram(
+        aes(turn), fill = "grey55", color = "black"
+      ) + # binwidth = 0.1) +
+      labs(x = "turning angle") +
       theme_bw() 
-
-    ggarrange(ps, pta) |> 
+    
+    # save the graph
+    ggarrange(ps, pta, common.legend = T) |> 
       annotate_figure(
         top = text_grob(
-          str_c(sp_id, " - unfiltered data"), face = "bold", size = 14
+          str_c(sp, " - unfiltered tracks"), face = "bold", size = 14
         )
       )
     
-    ggsave(here(out_dir, "4_speed_turn_before_filtering.pdf"))
+    ggsave(
+      here(sp_dir, "Graphs", "4_speed_turn_before_filtering.pdf"), 
+      width = 25, unit = "cm"
+    )
     
-    }
-  )
-
-# getting the quantiles, to understand which part of the speed distribution 
-# in the data is outside of the literature range
-# the output is saved just for the future reference
-
-quant_preclean <- speed_species |> 
-  map(~{
-
-    #sp_quant <- round(quantile(.x$speed, seq(0.5,1,0.01), na.rm = T), 2)
-    sp_quant <- round(
-      quantile(.x$speed, seq(0.95, 1, 0.001), na.rm = T),
-      2
-    )
-
-    tibble(
-      speed = sp_quant, #c(sp_quant, sp_quant_precise),
-      quant = names(sp_quant), #c(names(sp_quant), names(sp_quant_precise)),
-      species = unique(.x$species)
-    )
-
-  }) |>
-  bind_rows() |>
-  mutate(species = str_replace(species, "_", " ")) |>
-  left_join(
-    bird_speeds,
-    by = "species"
-  ) 
-
-quant_preclean |> 
-  write_csv(here("Data", "Studies", "4_speed_quantiles_before_filtering.csv"))
-
-# times <- speed_species |> 
-#   map(~{
-#     .x |> 
-#       distinct(species, compute_end_time, compute_start_time) |> 
-#       mutate(computing_time = compute_end_time - compute_start_time) 
-#   }) |> 
-#   bind_rows()
-
-rm(speed_species)
+    print(paste(sp, "DONE!"))
+    
+  }) 
 
 
+# 4 - Filter maximum speeds -----------------------------------------------
 
-# 3 - Filter speeds above the treshold ------------------------------------
-
+# eu_bb <- st_as_sfc(
+#   st_bbox(
+#     c(
+#       xmin = eu_xmin, xmax = eu_xmax, ymin = eu_ymin, ymax = eu_ymax
+#     ),
+#     crs = st_crs(4326)
+#     )
+# )
+# ORIGINALLY USED THIS, BUT GAVE UP, BECAUSE IT RETURNS WEIRD RESULTS
+# e.g. for Turdus # POINT (29.70283 40.92096) returns FALSE
+# track |>
+#   mutate(europe = as.vector(st_intersects(geometry, eu_bb, sparse = FALSE)))
 # TIME TRACKING
-#start_time <- Sys.time()
+# start_time <- Sys.time()
+# used for time tracking but gave up on that
 
-# species_clean <- tracks_list |> # used for time tracking but gave up on that
 tracks_list |>
   group_split(species) |>
   map(~{
 
+    # getting files per species
     files <- .x |> pull(file)
     lfl <- length(files)
 
-    sp <- unique(.x$sp)
+    # defining the specie sdir
+    sp <- unique(.x$species)
+    sp_dir <- here("Data", "Studies", str_replace(sp, " ", "_"))
     
+    # extracting the speed limit for the species
     speed_limit <- bird_speeds |> 
-      filter(species == unique(.x$species)) |> 
+      filter(species == sp) |> 
       pull()
-    
-    out_dir <- here("Data",  "Studies", sp, "4_filtered_speed")
-    
-    if(!dir.exists(out_dir)){ 
-      
-      dir.create(out_dir) 
-      
-    }
     
     files |>
       map(~{
         
-        fname <- .x
+        # define input and output files
+        fin <- .x
+        fout <- fin |> str_replace("_cleaned.rds", "_speed_filtered.rds")
 
-        print(paste(sp, which(fname == files), "|", lfl))
+        print(paste(sp, which(fin == files), "|", lfl))
 
-        track <- here("Data", "Studies", sp, "2_cleaned", fname) |>
+        track <- here(sp_dir, "2_cleaned", fin) |>
           read_rds()
         
         track <- track |> 
-          mutate(speed = mt_speed(track, units = "m/s"))
+          mutate(speed = mt_speed(track, units = "m/s")) 
         
+        
+        # calculate the maximum speed from the tracking data and 
+        # keep filtering out the points that produce max speed higher than
+        # the speed limit from the literature (section 2)
         max_speed <- max(track$speed, na.rm = T)
         
         while(max_speed > speed_limit) {
           
           track <- track |> 
-            # group_by(mt_track_id) |> 
             filter(speed <= speed_limit)
     
           track <- track |> 
-            mutate(speed = mt_speed(track, units="m/s"))
+            mutate(speed = mt_speed(track, units="m/s")) 
           
-          max_speed <- max(track$speed, na.rm = T)
+          if(nrow(track) > 1){ 
+            
+            max_speed <- max(track$speed, na.rm = T) 
+            
+          } else {
+            
+            print("track data insufficient")
+            break
           
-        }
+          }
+        } # close while loop for speed
         
+        # save the track only if after filtering there is
+        # more than 2 points avilable
         if(nrow(track) > 2){
           
           # adding the table with the times of dawn and dusk
           sun_time <- getSunlightTimes(
               data = tibble(
                 date = date(track$timestamp), 
-                lat = st_coordinates(track)[, 2],
-                lon = st_coordinates(track)[, 1]
+                lat = track$lat,
+                lon = track$lon
               ), 
-              keep = sun_times,
+              keep = sun_times, # defined in the section 0
               tz = "UTC"
             ) |> 
+            mutate(row_id = str_c("row_", 1:n()))
+            
+          track1 <- track |>  
+            mutate(row_id = str_c("row_", 1:n())) |>
+            left_join(sun_time, by = c("lon", "lat", "row_id")) |>
+            # getting the country and continent
+            st_join(world) |> 
             mutate(
-              timestamp = track$timestamp,
-              year = year(date),
-              yearday = yday(date),
-              row_id = str_c("row_", 1:n())
-            ) |>
-            rename_with(~"day_start", all_of(sun_times[["start"]])) |>
-            rename_with(~"day_end", all_of(sun_times[["end"]])) |>
-            # grouping days by light cycle
-            mutate(
-              day_cycle = if_else(
-                timestamp < day_start, 
-                str_c(yday(date - 1), "_", year(date - 1)),
-                str_c(yearday, "_", year)
+              within_eubb = (
+                lon >= eu_coords$xmin & lon <= eu_coords$xmax & 
+                  lat >= eu_coords$ymin & lat <= eu_coords$ymax
               )
             ) |> 
-            select(row_id, day_cycle, day_start, day_end, any_of(sun_times))
-            
-          
-          track |>  
-            mutate(row_id = str_c("row_", 1:n())) |> 
-            left_join(sun_time, by = "row_id") |> 
-            select(-row_id) |> 
+            select(-row_id, -lon, -lat) |>
             write_rds(
-              here(
-                out_dir, 
-                str_replace(fname, "_cleaned.rds", "_speed_filtered.rds")
-              )
+              here(sp_dir, "4_filtered_speed", fout)
             )
-        }
+        } # close if(nrow(track) > 2)
          
 
-      }) # close map for files
+      }) # close map for files 
     
     print(paste(sp, "DONE!"))
-    
-    # TIME TRACKING
-    # tibble(
-    #   species = sp, 
-    #   compute_end_time = Sys.time()
-    # ) 
 
-  }) # close map for species
-  # TIME TRACKING
-  # bind_rows() 
-  # mutate(
-  #   compute_start_time = start_time, 
-  #   computing_time = compute_end_time - compute_start_time
-  # ) 
+  })  # close map for species
 
 
-# 4 - Speed distribution after filtering ----------------------------------
 
+# 5 - Speed distribution after filtering ----------------------------------
 
 # get the speeds and turning angles for every species
-
 
 target_sp |>
   map(~{
     
+    # define species directory
     sp <- .x
-    
     sp_dir <- here("Data",  "Studies", str_replace(sp, " ", "_"))
     
+    # getting all the files
     file_paths <- here(sp_dir, "4_filtered_speed") |> 
       list.files(full.names = T) 
-    
-    lfp <- length(file_paths)
+    lfl <- length(file_paths)
     
 
     speed_df <- file_paths |>
       map(~{
         
-        print(paste(sp, which(.x == file_paths), "|", lfp))
+        print(paste(sp, which(.x == file_paths), "|", lfl))
         
         track <- .x |>
           read_rds() 
@@ -370,19 +384,25 @@ target_sp |>
             turn = mt_turnangle(track)
           ) |> 
           as_tibble() |>
-          select(-event_id) |> 
-          select(contains(c("_id", "_identifier")), speed, turn) 
-        
+          select(speed, turn) 
         
       }) |> # close file_paths
       bind_rows() 
     
-    ps <- ggplot(speed_df) +
-      geom_histogram(aes(speed), fill = "grey55", color = "black") + #, binwidth = 10
+    ps <- speed_df |> 
+      filter(!is.na(speed)) |> 
+      ggplot() +
+      geom_histogram(
+        aes(speed), fill = "grey55", color = "black"
+      ) + #, binwidth = 10
       theme_bw()
     
-    pta <- ggplot(speed_df) +
-      geom_histogram(aes(turn), fill = "grey55", color = "black") + # binwidth = 0.1) +
+    pta <- speed_df |> 
+      filter(!is.na(turn)) |> 
+      ggplot() +
+      geom_histogram(
+        aes(turn), fill = "grey55", color = "black"
+      ) + # binwidth = 0.1) +
       theme_bw() 
     
     ggarrange(ps, pta) |> 
@@ -394,115 +414,55 @@ target_sp |>
     
     ggsave(here(sp_dir, "Graphs", "4_speed_turn_after_filtering.pdf"))
     
-    sp_quant <- round(
-      quantile(speed_df$speed, seq(0.95, 1, 0.001), na.rm = T), 
-      2
-    )
-    
-    tibble(
-      speed = sp_quant, #c(sp_quant, sp_quant_precise),
-      quant = names(sp_quant), #c(names(sp_quant), names(sp_quant_precise)),
-      species = sp, 
-      compute_time_end = Sys.time()
-    )
-
-  }) |> 
-  bind_rows() |> 
-  left_join(
-    bird_speeds,
-    by = "species"
-  ) |>  
-  write_csv(here("Data", "Studies", "4_speed_quantiles_after_filtering.csv"))
+  }) # close map species
   
 
-# Warning messages:
-# 1: Removed 1 rows containing non-finite values (`stat_bin()`).
-# 2: Removed 2 rows containing non-finite values (`stat_bin()`).
-# 3: Removed 436 rows containing non-finite values (`stat_bin()`).
-# 4: Removed 19308 rows containing non-finite values (`stat_bin()`).
-# 5: Removed 21 rows containing non-finite values (`stat_bin()`).
-# 6: Removed 696 rows containing non-finite values (`stat_bin()`).
-# 7: Removed 2622 rows containing non-finite values (`stat_bin()`).
-# 8: Removed 221380 rows containing non-finite values (`stat_bin()`).
-# 9: Removed 247 rows containing non-finite values (`stat_bin()`).
-# 10: Removed 940 rows containing non-finite values (`stat_bin()`).
-# 11: Removed 617 rows containing non-finite values (`stat_bin()`).
-# 12: Removed 1802 rows containing non-finite values (`stat_bin()`).
-# 13: In max.default(structure(NA_real_, units = structure(list( ... :
-#   no non-missing arguments to max; returning -Inf
-# 14: Removed 1 rows containing non-finite values (`stat_bin()`).
-# 15: Removed 2 rows containing non-finite values (`stat_bin()`).
-# 16: Removed 435 rows containing non-finite values (`stat_bin()`).
-# 17: Removed 19251 rows containing non-finite values (`stat_bin()`).
-# 18: Removed 21 rows containing non-finite values (`stat_bin()`).
-# 19: Removed 696 rows containing non-finite values (`stat_bin()`).
-# 20: Removed 2617 rows containing non-finite values (`stat_bin()`).
-# 21: Removed 221138 rows containing non-finite values (`stat_bin()`).
-# 22: Removed 242 rows containing non-finite values (`stat_bin()`).
-# 23: Removed 921 rows containing non-finite values (`stat_bin()`).
-# 24: Removed 583 rows containing non-finite values (`stat_bin()`).
-# 25: Removed 1731 rows containing non-finite values (`stat_bin()`).
+
+# BACKUP code for obtaining day cycles ---------------------------------------
+
+# before we included information on the day cycle, but now I am not sure we
+# will need it anymore, so here I just leave the older version of code used 
+# to get the day cycles just in case we need it for the future
+
+# adding the table with the times of dawn and dusk
+# sun_time <- getSunlightTimes(
+#   data = tibble(
+#     date = date(track$timestamp), 
+#     lat = st_coordinates(track)[, 2],
+#     lon = st_coordinates(track)[, 1]
+#   ), 
+#   keep = sun_times, # defined in the section 0
+#   tz = "UTC"
+# ) |> 
+#   mutate(
+#     timestamp = track$timestamp,
+#     year = year(date),
+#     yearday = yday(date),
+#     row_id = str_c("row_", 1:n())
+#   ) |>
+#   rename_with(~"day_start", all_of(sun_times[["start"]])) |>
+#   rename_with(~"day_end", all_of(sun_times[["end"]])) |>
+#   # grouping days by light cycle
+#   mutate(
+#     day_cycle = if_else(
+#       timestamp < day_start, 
+#       str_c(yday(date - 1), "_", year(date - 1)),
+#       str_c(yearday, "_", year)
+#     )
+#   ) |> 
+#   select(
+#     row_id, day_cycle, day_start, day_end, 
+#     any_of(sun_times), lon, lat
+#   )
 
 
-# Function for speeds, slows down -----------------------------------------
+# BACKUP code for saving processing time ----------------------------------
 
-# # it is 2 minutes slower with the funciton 
-# get_speeds <- function(file_paths, add_turns = F){
-# 
-#   if(add_turns == T){
-# 
-#     out_df <- file_paths |>
-#       map(~{
-# 
-#         print(paste(.x, which(.x == file_paths), "|", length(file_paths)))
-# 
-#         .x |>
-#           read_rds() |>
-#           group_split(deployment_id) |>
-#           map(~ {
-# 
-#             track <- .x
-# 
-#             track |>
-#               mutate(
-#                 speed = mt_speed(track),
-#                 turns = mt_turnangle(track)
-#               ) |>
-#               as_tibble() |>
-#               select(contains(c("_id", "_identifier")), speed, turns) |>
-#               select(-event_id) |>
-#               mutate(file_path = .x)
-#           }
-#           )
-#       }
-#       )
-# 
-#   } else {
-# 
-#     out_df <- file_paths |>
-#       map(~{
-# 
-#         print(paste(.x, which(.x == file_paths), "|", length(file_paths)))
-# 
-#         .x |>
-#           read_rds() |>
-#           group_split(deployment_id) |>
-#           map(~ {
-# 
-#             track <- .x
-# 
-#             track |>
-#               mutate(speed = mt_speed(track)) |>
-#               as_tibble() |>
-#               select(contains(c("_id", "_identifier")), speed) |>
-#               select(-event_id) |>
-#               mutate(file_path = .x)
-#           }
-#           )
-# 
-# 
-#       }) |>
-#       bind_rows()
-# 
-#   }
-# }
+# TIME TRACKING
+# bind_rows() 
+# mutate(
+#   compute_start_time = start_time, 
+#   computing_time = compute_end_time - compute_start_time
+# ) 
+
+
