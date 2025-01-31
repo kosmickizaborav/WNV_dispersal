@@ -17,6 +17,7 @@ library(amt)
 library(here)
 library(sf)
 library(units)
+library(paletteer)
 
 # getting the species of interest
 # getting the species of interest
@@ -65,7 +66,7 @@ target_sp |>
     
     sp <- .x 
     
-    # folder of the species data
+    # folder with species data
     sp_dir <- here("Data",  "Studies", str_replace(sp, " ", "_"))
     
     # list all deployments
@@ -166,7 +167,7 @@ target_sp |>
     
     sp <- .x 
     
-    # folder of the species data
+    # folder with species data
     sp_dir <- here("Data",  "Studies", str_replace(sp, " ", "_"))
     
     # list all deployments
@@ -185,7 +186,7 @@ target_sp |>
         track <- here(sp_dir, "5_resampled", fin) |> 
           read_rds() |> 
           filter(
-            day_period == "night" & timestamp == max(timestamp), 
+            day_period == "night" & timestamp >= (max(timestamp)-hours(2)), 
             .by = dcp
           ) 
         
@@ -197,6 +198,9 @@ target_sp |>
              tolerance = resample_tolerance
            ) |> 
            filter_min_n_burst(min_n = 3) |>
+           # keep columns from the start, so that we have the same day
+           # cycle in night and days later, if we would keep info for the end
+           # it would point to the next day
            steps_by_burst(lonlat = T, keep_cols = 'start')  |> 
            mutate(track_file = fin) 
          
@@ -206,6 +210,7 @@ target_sp |>
           
         )
         
+        # if there is no data, return a tibble with the file name and a comment
         if(nrow(steps) == 0){
           
           tibble(
@@ -245,8 +250,18 @@ target_sp |>
     # loading the one loc per day morning steps 
     night_steps <- here(sp_dir, "6_distances", night_file) |> 
       read_rds() |> 
-      filter(comment == "night steps available") # no night steps available
-      # select(-comment)
+      filter(comment == "night steps available") |> # no night steps available
+      # remove all the columns that are associated with night steps
+      select(
+        -any_of(
+          c(
+            "direction_p", "ta_", "date", "day_period", "dcp", "dt_", 
+            "sl_", "comment", "timestamp", "x2_", "y2_"
+          )
+        )
+      ) |> 
+      # geometry saved but without a coordinate system, so we redefine it later
+      st_drop_geometry()
     
     if(nrow(night_steps) > 0){
     
@@ -254,7 +269,7 @@ target_sp |>
     files <- unique(night_steps$track_file)
     lfl <- length(files)
     
-    files |> 
+    day_steps <- files |> 
       map(~{
         
         fin <- .x
@@ -265,21 +280,19 @@ target_sp |>
         track <- here(sp_dir, "5_resampled", fin) |> 
           read_rds() 
         
-        night_steps |> 
+        df <- night_steps |> 
           filter(track_file == fin) |> 
           st_as_sf(coords = c("x1_", "y1_"), crs = st_crs(track)) |> 
-          group_split(step_id) |> 
+          group_split(step_id, burst_) |> 
           map(~{
             
             step_df <- .x 
             
-            strack <- track |> 
-              select(t_, x_, y_, day_period) |> 
-              filter(t_ >= step_df$t1_, t_ <= step_df$t2_) |> 
-              rename_with(~str_replace(.x, "_$", "2_"))
-            
-            check <- strack |>
-              mutate(sl_ = st_distance(strack, step_df)[,1]) |> 
+            track |> 
+              select(t_, x_, y_, day_period, dcp) |> 
+              filter(t_ > step_df$t1_, t_ <= step_df$t2_) |> 
+              rename_with(~str_replace(.x, "_$", "2_")) |>
+              mutate(sl_ = st_distance(geometry, step_df)[,1]) |> 
               mutate(
                 t1_ = step_df$t1_, 
                 x1_ = st_coordinates(step_df)[,1], 
@@ -287,15 +300,23 @@ target_sp |>
                 step_id = step_df$step_id, 
                 burst_ = step_df$burst_
               ) |> 
+              # remove the points that fall during the night
+              # in case we selected the t2_ from the night step 
               filter(day_period == "day") |> 
-              arrange(sl_, t2_) |> 
+              # odrder by distance and time
+              arrange(sl_, desc(t2_)) |> 
+              # take the last value (highest sl_ /and earliest t2_)
               slice_tail(n = 1) |> 
-              st_drop_geometry()
+              st_drop_geometry() |> 
+              # adding other characteristics of the step
+              left_join(
+                step_df |> select(-t2_) |> st_drop_geometry(), 
+                by = c("t1_", "step_id", "burst_")
+              )
             
           }) |>  # close map step_id
           bind_rows() |> 
-          mutate(track_file = fin) |> 
-          select(-day_period)
+          mutate(track_file = fin) 
         
       }) |>  # close map files
       bind_rows() |> 
@@ -311,6 +332,124 @@ target_sp |>
     
   }) # close map species 
 
+
+
+# 4 - Sumarize number of steps per day ------------------------------------
+
+# define palette for the graph
+colp <- paletteer_d("MoMAColors::Lupi")
+# define breaks for the colors 
+col_break <- c(1, 5, 10, 25, 50, 75, 100)
+
+step_summary <- target_sp |> 
+  map(~{
+    
+    sp <- .x 
+    # folder of the species data
+    sp_dir <- here("Data",  "Studies", str_replace(sp, " ", "_"))
+    
+    night_steps <- here(sp_dir, "6_distances", night_file) |> 
+      read_rds() |> 
+      filter(comment == "night steps available")  # no night steps available
+      
+    
+    if(nrow(night_steps) > 0){
+      
+      here(sp_dir, "6_distances", day_file) |> 
+        read_rds() |> 
+        bind_rows(
+          night_steps |> 
+            mutate(sl_ = units::set_units(sl_, "m"))
+        ) |> 
+        separate_wider_delim(
+          col = day_cycle, delim = "_", names = c("yday", "year")
+        ) |> 
+        summarize(
+          n_steps = n(), 
+          n_individuals = length(unique(track_file)), 
+          .by = yday
+        ) |> 
+        mutate(species = sp)
+      
+    } else{
+      
+      tibble(
+        species = sp, 
+        n_steps = NA
+      )
+      
+    }
+    
+  }) |> # close map species
+  bind_rows() |> 
+  filter(!is.na(n_steps)) |> 
+  mutate(
+    yday_date = as.Date(as.numeric(yday), origin = str_c("2000-01-01")), 
+    month = month(yday_date), 
+    day = day(yday_date)
+  ) |> 
+  select(-yday_date) |> 
+  pivot_longer(
+    cols = c(n_steps, n_individuals), 
+    names_to = "step_name", 
+    values_to = "step_count"
+  ) |> 
+  mutate(
+    pfill = cut(
+      step_count, 
+      breaks = if_else(
+        max(step_count, na.rm = T) > max(col_break), 
+        list(c(col_break, max(step_count, na.rm = T))),
+        list(col_break)
+      )[[1]],
+      right = FALSE
+    )
+  )
+
+# naming colors with the right categories
+colp_names <- levels(step_summary$pfill)
+colp <- colp[1:length(colp_names)] 
+names(colp) <- colp_names
+
+step_summary |> 
+  mutate(
+    step_name = case_when(
+      step_name == "n_steps" ~ "number of steps", 
+      step_name == "n_individuals" ~ "number of individuals"
+    )
+  ) |> 
+  ggplot() + 
+  geom_tile(
+    aes(y = month, x = day, fill = pfill),
+    color = "gray11",
+    na.rm = TRUE,
+    linewidth = 0.5
+    #color = "black"
+  ) +
+  labs(
+    fill = "count",
+    title = "Distributuion of avaialble steps per species"
+  ) +
+  scale_y_continuous(trans = "reverse", breaks = seq(1,12, 2)) +
+  scale_x_continuous(breaks = seq(1, 31, 2), limits = c(1, 31)) +
+  scale_fill_manual(values = colp) +
+  coord_fixed(ratio = 1) +
+  facet_grid(species~step_name + day_period) +
+  theme_bw() +
+  guides(fill = guide_legend(nrow = 1)) +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(), 
+    legend.position = "bottom"
+  ) 
+
+
+ggsave(
+  here("Data", "Graphs", "6_available_steps_per_species.png"), 
+  height = 20, 
+  width = 25,
+  units = "cm"
+)
 
 
 # 4 - Making graphs --------------------------------------------------------
@@ -371,14 +510,7 @@ target_sp |>
       
       full_df <- night_df |>
         bind_rows(day_df) |> 
-        mutate(
-          country_plot = case_when(
-            !is.na(country) ~ country, 
-            is.na(country) & within_eubb ~ "within European boundary box",
-            is.na(country) & within_eubb ~ "outside European boundary box"
-          ), 
-          day_period = factor(day_period, levels = c("night", "day"))
-        )
+        
       
       rm(day_df, night_df)
       
@@ -459,8 +591,10 @@ target_sp |>
               coord_fixed(ratio = 1) +
               facet_wrap(~year, ncol = 1) +
               theme_bw() +
-              theme(panel.grid.major = element_blank(),
-                    panel.grid.minor = element_blank())
+              theme(
+                panel.grid.major = element_blank(),
+                panel.grid.minor = element_blank()
+              )
             # theme(
             #   legend.position = "bottom",
             #   legend.text = element_text(angle = 90, vjust = 0.5)
@@ -473,10 +607,7 @@ target_sp |>
                 "Graphs", 
                 "6_distances_plots", 
                 str_replace(fname, "_resampled.rds",  "_distance.png")
-              ), 
-              width = 10, 
-              height = 20, 
-              units = "cm"
+              )
             )
             
           }
@@ -495,3 +626,141 @@ target_sp |>
     print(paste(sp, "DONE!"))
 
 }) # close map species
+
+
+
+# summary 2 ---------------------------------------------------------------
+
+
+night_df <- target_sp |> 
+  map(~{
+    
+    sp <- .x 
+    # folder of the species data
+    sp_dir <- here("Data",  "Studies", str_replace(sp, " ", "_"))
+    
+    night_steps <- here(sp_dir, "6_distances", night_file) |> 
+      read_rds() |> 
+      mutate(period = "night") |> # no night steps available
+      units::drop_units() |> 
+      mutate(species = sp)
+
+  }) |> 
+  bind_rows() |> 
+  sf::st_drop_geometry() |>
+  filter(comment == "night steps available") |> 
+  select(t1_, t2_, day_cycle, sl_, period, track_file, step_id, within_eubb, species) 
+
+info <- night_df |> 
+  distinct(day_cycle, t1_, t2_, track_file, within_eubb) |> 
+  rename(t2_night = t2_)
+
+day_df <- target_sp |> 
+  map(~{
+    
+    sp <- .x 
+    # folder of the species data
+    sp_dir <- here("Data",  "Studies", str_replace(sp, " ", "_"))
+    
+    if(file.exists(here(sp_dir, "6_distances", day_file))){
+      
+      here(sp_dir, "6_distances", day_file) |> 
+        read_rds() |> 
+        mutate(period = "day") |> 
+        drop_units() |> 
+        mutate(species = sp)
+      
+    } else{
+      tibble()
+    }
+  }) |> 
+  bind_rows() |> 
+  left_join(info) |> 
+  rename(t2_day = t2_) |> 
+  filter(t2_day != t2_night)
+  
+
+df <- bind_rows(night_df, day_df) |> 
+  select(sl_, species, period, day_cycle, within_eubb) |> 
+  filter(within_eubb == T) |> 
+  separate_wider_delim(
+    col = day_cycle, delim = "_", names = c("yday", "year")
+  ) |> 
+  mutate(
+    sl_ = round(sl_/1000),
+    yday_date = as.Date(as.numeric(yday), origin = str_c("2000-01-01")), 
+    month = month(yday_date), 
+    day = day(yday_date)
+  ) |> 
+  summarise(
+    sl_ = median(sl_, na.rm = T),
+    .by = c(species, period, month, day, yday)
+  ) |> 
+  mutate(
+    pfill = cut(
+      sl_, 
+      breaks = c(0, 0.1, 5, 10, 25, 50, 75, 100, 150, max(sl_)), 
+      right = FALSE
+    )
+  )
+
+length(levels(df$pfill))
+
+colp_names <- levels(df$pfill)
+colp <- c("gray", paletteer_d("MoMAColors::Lupi"))
+names(colp) <- colp_names
+
+
+df |> 
+  mutate(period = if_else(period == "day", "dan", "noć") |> factor(levels = c("dan", "noć"))) |> 
+  ggplot() +
+  geom_tile(
+    aes(y = month, x = day, fill = pfill),
+    color = "gray11",
+    # color = day_period excluded day for now
+    na.rm = TRUE,
+    linewidth = 0.5
+    #color = "black"
+  ) +
+  labs(
+    fill = "median distanca [km]", 
+    title = "Srednje dnevne distance - Evropa"
+  ) +
+  scale_y_continuous(trans = "reverse", breaks = 1:12) +
+  scale_x_continuous(breaks = seq(1,31, 2)) +
+  scale_fill_manual(values = colp) +
+  # scale_fill_stepsn(
+  #   colours = c("black", colp), 
+  #   breaks = c(0, midp, pbreaks)
+  # ) +
+  facet_grid(species~period) +
+  theme_bw() +
+  #guides(fill = guide_legend(nrow = 1)) +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(), 
+    legend.position = "bottom"
+  ) 
+
+
+ggsave(
+  here("Data", "Graphs", "6_available_night_steps_per_species.png"), 
+  height = 25, 
+  width = 20,
+  units = "cm"
+)
+  
+  theme(
+  legend.position = "bottom"
+)
+# 
+
+ggsave(
+  here(
+    "Data", 
+    "Graphs", 
+    "dan_noc.png"
+  )
+)
+
+

@@ -82,9 +82,10 @@ original_tracks <- target_sp |>
               difftime(track_end, track_start, units = "days")
             ),
             track_unique_days = length(unique(date(timestamp))), 
-            median_timelag_mins = median(timelag, na.rm = T),
-            mean_timelag_mins = mean(timelag, na.rm = T),
-            min_timelag_mins = min(timelag, na.rm = T),
+            # unnecessary for now
+            # median_timelag = median(timelag, na.rm = T),
+            # mean_timelag = mean(timelag, na.rm = T),
+            # min_timelag = min(timelag, na.rm = T),
             n_locs = n()
           ) |> 
           mutate(across(contains(c("period", "timelag")), ~round(.x, 1))) |>
@@ -276,7 +277,8 @@ original_tracks <- original_tracks |>
     excluded = if_else(
       dup_tag_to_exclude | dup_ind_to_exclude, "yes", "no", missing = "no"
     )
-  ) 
+  ) |> 
+  select(-row_id)
 
 
 original_tracks |> 

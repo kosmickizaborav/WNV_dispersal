@@ -39,17 +39,11 @@ if(!dir.exists(graphs_main)){
 }
 
 # keeping just columns of interest
-columns_of_interest <- c("individual_local_identifier", 
+columns_of_interest <- c(
+  "timestamp", "geometry", "individual_local_identifier", 
   "sensor_type", "sex", "manipulation_type", 
   "country", "country_admin", "continent", "within_eubb", "study_site"
   )
-
-
-# define times of the sun positions that will be included in the data
-sun_times <- c(
-  "nightEnd", "night", "nauticalDawn", "nauticalDusk", "dawn", "dusk"
-)
-
 
 day_limits <- c(day_start = "nightEnd", day_end = "night")
 
@@ -115,8 +109,7 @@ if(!file.exists(sampling_rate_file)){
           print(paste(sp, which(fin == files), "|", lfl))
           
           mtrack <- here(sp_dir, "4_filtered_speed", fin) |> 
-            read_rds() |> 
-            mutate(track_file = fin)
+            read_rds() 
           
           mtrack |> 
             mutate(
@@ -126,12 +119,12 @@ if(!file.exists(sampling_rate_file)){
             ) |> 
             make_track(
               x, y, t,
-              id = track_file,
+              id = file,
               crs = sf::st_crs(mtrack), 
               all_cols = F
             ) |> 
             summarize_sampling_rate(time_unit = "min") |> 
-            mutate(track_file = fin)
+            mutate(file = fin)
           
         }) |> # map files
         bind_rows() |> 
@@ -229,7 +222,10 @@ target_sp |>
         # moved addition of columns here and not at the end, because it changed
         # the dataframe class from track to tibble and we don´t want that
         mtrack <- here(sp_dir, "4_filtered_speed", fin) |> 
-          read_rds() 
+          read_rds() |> 
+          select(all_of(c(columns_of_interest, unname(day_limits)))) |> 
+          rename_with(~"day_start", all_of(day_limits[["day_start"]])) |>
+          rename_with(~"day_end", all_of(day_limits[["day_end"]])) 
         
         track <- mtrack |> 
           mutate(
@@ -237,23 +233,37 @@ target_sp |>
             y = st_coordinates(mtrack)[,2], 
             t = timestamp
           ) |> 
-          st_drop_geometry() |> 
-          as_tibble() |> 
-          select(
-            x, y, t, all_of(c(columns_of_interest, sun_times))
-          ) |> 
           make_track(
             x, y, t,
             id = individual_local_identifier,
-            crs = st_crs(mtrack), 
+            crs = sf::st_crs(mtrack), 
             all_cols = T
           ) |> 
           track_resample(
             rate = resample_rate,
             tolerance = resample_tolerance
           ) |> 
-          filter(!if_all(all_of(sun_times), ~is.na(.))) |> 
-          select(-burst_)
+          # adding day and night parameters
+          mutate(date = as.Date(timestamp)) |> 
+          # in the northern latitudes sometimes the sun doesn't set so 
+          # to filter out those locations if we are using the nautical dusk
+          # filter(!is.na(day_start) & !is.na(day_end))
+          mutate(
+            day_cycle = if_else(
+              timestamp < day_start,
+              str_c(yday(date - 1), "_", year(date - 1)),
+              str_c(yday(date), "_", year(date))
+            ),
+            day_period = if_else(
+              timestamp < day_start | timestamp >= day_end, 
+              "night",
+              "day", 
+              missing = NA
+            ), 
+            dcp = str_c(day_cycle, "_", day_period)
+          ) |> 
+          filter(!is.na(dcp)) |> 
+          select(-date)
         
         rm(mtrack)
         
@@ -295,12 +305,13 @@ postsampling_rate <- target_sp |>
       map(~{
         
         fin <- .x
+        print(fin)
         print(paste(sp, which(fin == files), "|", lfl))
         
         track <- here(sp_dir, "5_resampled", fin) |> 
           read_rds() |> 
           summarize_sampling_rate(time_unit = "min") |> 
-          mutate(track_file = fin)
+          mutate(file = fin)
         
       }) |> # map files
       bind_rows() |> 

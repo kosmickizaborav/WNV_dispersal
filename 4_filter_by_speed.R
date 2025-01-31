@@ -41,42 +41,14 @@ library(rnaturalearth)
 
 tracks_list <- here("Data", "Studies", "3_deployment_duplicates_excluded.rds") |> 
   read_rds() |> 
-  filter(excluded == "no") 
+  filter(excluded == "no") |> 
+  select(file, species)
 
 # getting species of interest
 target_sp <- tracks_list |>
   distinct(species) |>
   pull() 
   # str_replace(" ", "_")
-
-
-# 0 - 1 - Variables to add ------------------------------------------------
-
-# variables used in the section 4, to extract dawn and dusk times, and check 
-# where in the world the track is located
-
-# load world map for checking weather the track is in europe or elsewhere
-world <- ne_countries(scale = "medium", returnclass = "sf") |> 
-  select(sovereignt, admin, continent) |> 
-  rename(country = sovereignt, country_admin = admin)
-
-# europe ranges taken from: 
-# https://en.wikipedia.org/wiki/Extreme_points_of_Europe
-# Latitude: 34°N to 81°N
-# Longitude: 29°W to 69°E
-eu_coords <- list(
-  ymin = 34.0,
-  ymax = 81.0,
-  xmin = -29.0,
-  xmax = 69.0
-)
-
-# define times of the sun positions that will be included in the data
-sun_times <- c(
-  start = "dawn", end = "dusk", 
-  "nauticalDawn", "nauticalDusk", 
-  "night", "nightEnd"
-)
 
 # 1 - Create output directories -------------------------------------------
 
@@ -125,11 +97,11 @@ bird_speeds <- here("Alerstam_2007_supplement_table_extracted.xlsx")|>
   summarise(
     speed_lim = ceiling(max(c(max_speed_bruderer, max_speed), na.rm = T)), 
     .by = species
-  ) |> 
-  mutate(speed_lim = set_units(speed_lim, m/s))
+  ) 
+  #mutate(speed_lim = set_units(speed_lim, m/s))
 
 
-# 3 - Speed distribution before filtering ------------------------------------
+# 3 - Plot speed distribution before filtering ---------------------------------
 
 # get the speeds and turning angles for every species
 
@@ -170,7 +142,8 @@ tracks_list |>
           select(speed, turn) 
             
         }) |> 
-      bind_rows()
+      bind_rows() |> 
+      drop_units()
     
    
     # 3 - 2 - Plot speeds and turns------------------------------
@@ -196,25 +169,21 @@ tracks_list |>
     ps <- speeds_df |> 
       filter(!is.na(speed)) |> 
       ggplot() +
-      geom_histogram(
-        aes(speed), fill = "grey55", color = "black"
-      ) +
+      geom_histogram(aes(speed), fill = "grey55", color = "black") +
       geom_vline(
         data = sp_limits_graph, 
         mapping = aes(xintercept = speed, color = text), 
         linewidth = 1.2
       ) +
-      labs(x = "speed", color = "") +
+      labs(x = "speed [m/s]", color = "") +
       theme_bw() +
       theme(legend.position = "bottom")
     
     pta <- speeds_df |> 
       filter(!is.na(turn)) |> 
       ggplot() +
-      geom_histogram(
-        aes(turn), fill = "grey55", color = "black"
-      ) + # binwidth = 0.1) +
-      labs(x = "turning angle") +
+      geom_histogram(aes(turn), fill = "grey55", color = "black") + # binwidth = 0.1) +
+      labs(x = "turning angle [rad]") +
       theme_bw() 
     
     # save the graph
@@ -226,7 +195,7 @@ tracks_list |>
       )
     
     ggsave(
-      here(sp_dir, "Graphs", "4_speed_turn_before_filtering.pdf"), 
+      here(sp_dir, "Graphs", "4_speed_turn_before_filtering.png"), 
       width = 25, unit = "cm"
     )
     
@@ -234,8 +203,38 @@ tracks_list |>
     
   }) 
 
+gc(verbose = F)
 
 # 4 - Filter maximum speeds -----------------------------------------------
+
+# 4 - 1 - Variables to add ------------------------------------------------
+
+# variables used in the section 4, to extract dawn and dusk times, and check 
+# where in the world the track is located
+
+# load world map for checking weather the track is in europe or elsewhere
+# scale was set to "medium", becasue with large i get the following error
+# Error in wk_handle.wk_wkb(wkb, s2_geography_writer(oriented = oriented, : 
+# Loop 0 is not valid: Edge 1028 has duplicate vertex with edge 1033
+world <- ne_countries(scale = "medium", returnclass = "sf") |> 
+  select(sovereignt, admin, continent) |> 
+  rename(country = sovereignt, country_admin = admin)
+
+# europe ranges taken from: 
+# https://en.wikipedia.org/wiki/Extreme_points_of_Europe
+# Latitude: 34°N to 81°N
+# Longitude: 29°W to 69°E
+eu_coords <- list(
+  ymin = 34.0,
+  ymax = 81.0,
+  xmin = -29.0,
+  xmax = 69.0
+)
+
+# define times of the sun positions that will be included in the data
+sun_times <- c(
+  "nightEnd", "night", "nauticalDawn", "nauticalDusk", "dawn", "dusk"
+)
 
 # eu_bb <- st_as_sfc(
 #   st_bbox(
@@ -268,7 +267,8 @@ tracks_list |>
     # extracting the speed limit for the species
     speed_limit <- bird_speeds |> 
       filter(species == sp) |> 
-      pull()
+      pull() |> 
+      set_units("m/s")
     
     files |>
       map(~{
@@ -279,12 +279,14 @@ tracks_list |>
 
         print(paste(sp, which(fin == files), "|", lfl))
 
+
+        # 4 - 2 - Filter speed ------------------------------------
+        
+        # load track and calculate speed
         track <- here(sp_dir, "2_cleaned", fin) |>
           read_rds()
-        
         track <- track |> 
           mutate(speed = mt_speed(track, units = "m/s")) 
-        
         
         # calculate the maximum speed from the tracking data and 
         # keep filtering out the points that produce max speed higher than
@@ -311,9 +313,8 @@ tracks_list |>
           }
         } # close while loop for speed
         
-        # save the track only if after filtering there is
-        # more than 2 points avilable
-        if(nrow(track) > 2){
+        # save the track only if after filtering there is at least 3 points available
+        if(nrow(track) >= 3){
           
           # adding the table with the times of dawn and dusk
           sun_time <- getSunlightTimes(
@@ -327,7 +328,7 @@ tracks_list |>
             ) |> 
             mutate(row_id = str_c("row_", 1:n()))
             
-          track1 <- track |>  
+          track |>  
             mutate(row_id = str_c("row_", 1:n())) |>
             left_join(sun_time, by = c("lon", "lat", "row_id")) |>
             # getting the country and continent
@@ -338,7 +339,10 @@ tracks_list |>
                   lat >= eu_coords$ymin & lat <= eu_coords$ymax
               )
             ) |> 
-            select(-row_id, -lon, -lat) |>
+            select(
+              -row_id, -lon, -lat, -speed, -date, 
+              -contains(c("tag", "deployment_local")),
+            ) |> 
             write_rds(
               here(sp_dir, "4_filtered_speed", fout)
             )
@@ -350,7 +354,6 @@ tracks_list |>
     print(paste(sp, "DONE!"))
 
   })  # close map for species
-
 
 
 # 5 - Speed distribution after filtering ----------------------------------

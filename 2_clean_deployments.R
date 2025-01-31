@@ -35,10 +35,21 @@ columns_of_interest <- c(
   "tag_local_identifier", "sensor_type_id", "individual_number_of_deployments", 
   "taxon_canonical_name", "sex", "animal_life_stage", 
   "manipulation_type", "manipulation_comments",
-  "gps_hdop", "gps_cdop", "gps_vdop",
+  "gps_hdop", "gps_vdop",
   "algorithm_marked_outlier", "import_marked_outlier",
-  "manually_marked_outlier"
+  "manually_marked_outlier",
+  "deploy_on_timestamp", "deploy_off_timestamp"
   )
+
+# from the above list eliminate the columns that we don't need anymore
+columns_to_remove <- c(
+  "sensor_type_id", "individual_number_of_deployments", 
+  "taxon_canonical_name", "manipulation_comments",
+  "gps_hdop", "gps_vdop",
+  "algorithm_marked_outlier", "import_marked_outlier",
+  "manually_marked_outlier",
+  "deploy_on_timestamp", "deploy_off_timestamp"
+)
 
 # used to change sensor type id from number to character
 sensors <- tibble(
@@ -90,7 +101,7 @@ target_sp |>
 # 2 - Clean deployments -------------------------------------------------------
 
 
-target_sp |>
+clean_report <- target_sp |>
   map(~{
     
     # species directory
@@ -113,19 +124,21 @@ target_sp |>
         mv <- here(sp_dir, "1_deployments", fin) |> 
           read_rds() |> 
           select(any_of(columns_of_interest)) |> 
-          # change the value of sensor_type_id to the character value 
-          # using variable sensors
           mutate(
+            # change the value of sensor_type_id to the character value 
+            # using variable sensors
             sensor_type = sensors$char[match(sensor_type_id, sensors$num)],
             # mark the E4Warning study
-            study_site = if_else(study_id %in% E4WarningID, "E4Warning", "other"),
+            study_site = if_else(
+              study_id %in% E4WarningID, "E4Warning", "other"
+            ),
             # exclude the E4warning data that was collected by sigfox 
             # before we positioned the antenna in the park
             study_site_comment = case_when(
               study_site == "E4Warning" & timestamp > antenna_date &
-                sensor_type_id == "sigfox" ~ "post-antenna",
+                sensor_type == "sigfox" ~ "post-antenna",
               study_site == "E4Warning" & timestamp <= antenna_date & 
-                sensor_type_id == "sigfox" ~ "pre-antenna",
+                sensor_type == "sigfox" ~ "pre-antenna",
               .default = NA
             )
           ) |>
@@ -142,24 +155,31 @@ target_sp |>
             )
           ) |>
           # rounding timestamp to minute to take only one position per minute
+          # ordering by gps_hdop, and or by the number of NAs in rows,
+          # so that it's minimized the gps error and the amount of data we proceed with 
           mutate(
             n_na = rowSums(is.na(pick(everything()))),
             timestamp = floor_date(timestamp, unit = "min")
           ) |>
-          # ordering by gps_hdop, and or by the number of NAs in rows,
-          # so that it's minimized
           arrange(across(any_of(c("timestamp", "gps_hdop", "n_na")))) |>
           mutate(
             # mark duplicated timestamps
             duplicated_timestamp = duplicated(timestamp),
-            n_locations = n(),
             year = year(timestamp),
             lon = st_coordinates(geometry)[, 1],
             lat = st_coordinates(geometry)[, 2]
           ) |> 
+          # removing the duplicated timestamps
+          mutate(
+            deploy_times = case_when(
+              !is.na(deploy_on_timestamp) & timestamp < deploy_on_timestamp ~ "out",
+              !is.na(deploy_off_timestamp) & timestamp > deploy_off_timestamp ~ "out", 
+              .default = NA
+            )
+          ) |> 
           select(-n_na)
-        
-        
+          
+    
         # officially there are no outliers, because when downloading it was 
         # specified not to include them, but left this just in case
         if(sum(str_detect("outlier", colnames(mv))) > 0){
@@ -197,7 +217,54 @@ target_sp |>
             
           } # close else sum(str_detect("outlier"))
         
-   
+        
+        # remove the imprecise points
+        # at the intro to movement eco they said if the hdop or vdop is 
+        # bigger than 5, then that point shouldn't be trusted
+        if(sum(c("gps_hdop", "gps_vdop") %in% colnames(mv)) > 0){
+        
+          out_df <- mv |> 
+            st_drop_geometry() |> 
+            as_tibble() |> 
+            # select only outlier columns
+            select(any_of(c("gps_hdop", "gps_vdop"))) |>
+            mutate(row_id = str_c("row", 1:n())) |>
+            pivot_longer(
+              cols = contains("dop"), 
+              names_to = "dop_type", 
+              values_to = "dop_value"
+            ) |>
+            mutate(dop_check = as.numeric(dop_value) > 5) |> 
+            # group_by row_id and check if there is any value with 
+            # positive outlier
+            summarize(
+              dop_check = sum(dop_check, na.rm = T),
+              dop_nonna = sum(!is.na(dop_value)),
+              .by = row_id
+            ) |> 
+            # mark outliers
+            mutate(
+              gps_precision = case_when(
+                dop_nonna > 0 & dop_check > 0 ~ "bad",
+                dop_nonna > 0 & dop_check == 0 ~ "ok",
+                .default = NA
+              )
+            ) |> 
+            select(gps_precision, row_id)
+          
+          mv <- mv |> 
+            mutate(row_id = str_c("row", 1:n())) |>
+            left_join(out_df, by = "row_id") |>
+            select(-row_id)
+          
+        } else{
+          
+          mv <- mv |> 
+            mutate(gps_precision = NA)
+          
+        }
+        
+
         mv <- mv |> 
           # marking problems in the track data
           # 1 - empty geometry (no coordinates),
@@ -205,31 +272,65 @@ target_sp |>
           # 3 - weird coordinates - lon > 180 or lat > 90,
           # 4 - duplicated time-stamps - eliminated points that are sampled
           #     with the frequency higher than 1 minute
-          # 5 - only one point - insufficient data
-          # 6 - the animal was manipulated more than just relocation
+          # 5 - the animal was manipulated more than just relocation
           #     according to the comments
-          # 7 - sigfox E4Warning data before putting the antenna in the park
+          # 6 - sigfox E4Warning data before putting the antenna in the park
+          # 7 - remove outliers if they are marked already
+          # 8 - eliminate imprecise data, if we have info for hdop an vdop, 
+          #     exclude the points with values higher than 5 
+          # 9 - check that deployment on and off time match with the track
           mutate(
             track_problem = case_when(
+              # 1 - empty geometry (no coordinates)
               st_is_empty(geometry) ~ "empty geometry",
-              # problematic dates
-              year < 1950 | year > year(Sys.Date()) ~ "weird date",
-              # coordinates outside of the range even though
+              # 2 - weird date - year before 1950 or in the future
+              year < 1950 | date(timestamp) > Sys.Date() ~ "weird date",
+              # 3 - weird coordinates - lon > 180 or lat > 90
               # the projection is EPSG:4326 (checked)
               abs(lon) > 180 | abs(lat) > 90 ~ "weird coordinates",
-              # duplicated timestamp
-              duplicated_timestamp == T ~ "duplicated timestamp",
-              n_locations == 1 ~ "only one location available",
+              # 4 - duplicated time-stamps - resampled to 1 minute
+              duplicated_timestamp == T ~ "duplicated timestamp (rounded to min)",
+              # 5 - the animal was manipulated more than just relocation
               manipulation_type == "other" ~ "manipulated more than relocation",
-              study_site_comment == "post-antenna" ~ "E4Warning sigfox pre-antenna",
+              # 6 - sigfox E4Warning data before putting antenna in the park
+              study_site_comment == "pre-antenna" ~ "E4Warning sigfox pre-antenna",
+              # 7 - remove outliers if they are marked already
               outlier == "outlier" ~ "outlier",
+              # 8 - eliminate imprecise data
+              gps_precision == "bad" ~ "hdop or vdop > 5",
+              # 9 - check that deployment on and off time match with the track
+              deploy_times == "out" ~ "out of deployment on-off times",
               .default = NA
             ) 
           ) |> 
-          select(-year, -duplicated_timestamp, -n_locations, -outlier)
+          mutate(
+            track_status = if_else(
+              sum(is.na(track_problem)) < 3, 
+              "less than 3 locations with no problems, not saved", 
+              "saved"
+            )
+          ) |> 
+          select(
+            -year, 
+            -duplicated_timestamp, 
+            -outlier, 
+            -gps_precision, 
+            -deploy_times, 
+            -any_of(columns_to_remove)
+          ) 
         
+        # save the track if there is at least 3 points without problems
+        if(sum(is.na(mv$track_problem)) >= 3){
+          
+          mv |>
+            filter(is.na(track_problem)) |> 
+            select(-track_problem, -track_status) |> 
+            write_rds(here(sp_dir, "2_cleaned", fout))
+          
+        } 
         
-        mv_summary <- mv |>
+        # getting the data/cleaning summary
+        mv |>
           as_tibble() |>
           summarize(
             n = n(),
@@ -238,29 +339,13 @@ target_sp |>
               "deployment_id",
               "individual_id",
               "individual_local_identifier",
-              "track_problem"
-              )
+              "track_problem", 
+              "track_status"
+            )
           ) |>
           mutate(file = fin) |>
           mutate(across(contains("_id"), as.character))
-
-        mv <- mv |>
-          filter(is.na(track_problem)) 
-
-        # if the data is empty, don't save the file
-        if(nrow(mv) > 2){
-
-          mv |>  write_rds(file = here(sp_dir, "2_cleaned", fout))
-
-        } else{
-
-          mv_summary <- mv_summary |>
-            mutate(comment = "track not saved!")
-
-        }
-
-        # in order to save it to report file
-        mv_summary
+        
 
       }) |> # close map files
       bind_rows() |> 
@@ -268,8 +353,10 @@ target_sp |>
     
   }) |> # close map species
   bind_rows() |> 
-  mutate(script_ran_on = Sys.time()) |>
-  write_csv(here("Data", "Studies", str_c("2_deployments_clean_report.csv")))
+  mutate(script_ran_on = Sys.time()) 
+
+clean_report |> 
+  write_csv(here("Data", "Studies", "2_deployments_clean_report.csv"))
 
 
 # previous code for outliers, way too slow

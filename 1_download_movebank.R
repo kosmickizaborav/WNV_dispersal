@@ -74,7 +74,8 @@ col_deploy <- c("taxon_canonical_name", "study_id", "deployment_id",
                 "individual_number_of_deployments", 
                 "deployment_local_identifier", "tag_id", "tag_local_identifier", 
                 "sex", "animal_life_stage",  "manipulation_type",
-                "manipulation_comments"
+                "manipulation_comments", 
+                "deploy_on_timestamp", "deploy_off_timestamp"
                 )
 
 
@@ -117,12 +118,16 @@ movebank_filtered <- movebank_access |>
     options("move2_movebank_key_name" = .x)
     
     # get info only for the studies with the download access, 
+    # originally doenloaded with this argument in the function, but after saw 
+    # that it keeps false
     # using all available accounts
-    movebank_download_study_info(i_have_download_access = TRUE) |> 
+    movebank_download_study_info() |> 
       mutate(account = .x)
     
   }) |> 
   bind_rows() |> 
+  # didn't work with just calling it within movebank_download_study_info
+  filter(i_have_download_access == TRUE) |> 
   # at least one registered deployment
   filter(
     as.numeric(number_of_deployed_locations) > 0 & 
@@ -138,6 +143,9 @@ movebank_filtered <- movebank_access |>
 
 movebank_filtered |>
   write_csv(here("Data", "1_downloadable_studies.csv"))
+
+movebank_filtered |>
+  write_rds(here("Data", "1_downloadable_studies.rds"))
 
 
 # 2 - Download deployment info and filter  --------------------------------
@@ -225,6 +233,7 @@ deployments |>
 
 # remove study info, as it's not needed anymore
 rm(movebank_filtered)
+gc()
 
 # filter deployments
 deployments_filtered <- deployments |> 
@@ -264,6 +273,7 @@ deployments_filtered |>
 
 # proceed only with filtered deployments
 rm(deployments)
+gc()
 
 
 # 3 - Create output directory for species with available data -------------
@@ -271,7 +281,7 @@ rm(deployments)
 # create folder for every species that has downloadable data
 deployments_filtered |> 
   distinct(species) |> 
-  as_vector() |>
+  pull() |>
   map(~{
     
     sp_dir <- here("Data", "Studies", str_replace(.x, " ", "_"))
@@ -315,8 +325,32 @@ safe_study_download <- safely(study_download)
   
 # download studies 
 studies <- unique(deployments_filtered$study_id)
-lengs <- length(studies)
+ls <- length(studies)
 
+
+# checking which data is already downloaded 
+downloaded_df <- target_sp |> 
+  map(~{
+    
+    sp <- .x 
+    sp_dir <- here(
+      "Data", "Studies",  str_replace(sp, " ", "_"), "1_deployments"
+    )
+    
+    # check what deployments are already downloaded
+    tibble(file = list.files(sp_dir)) |> 
+      mutate(
+        study_id = bit64::as.integer64(str_split_i(file, "_", 1)), 
+        individual_id = bit64::as.integer64(str_split_i(file, "_", 3)), 
+        deployment_id = bit64::as.integer64(str_split_i(file, "_", 5)), 
+        species = sp
+      ) 
+    
+  }) |> 
+  bind_rows()
+
+
+# downloading studies one by one
 download_report <- deployments_filtered |>
   group_split(study_id, individual_local_identifier) |>
   map(~{
@@ -330,12 +364,8 @@ download_report <- deployments_filtered |>
       )
     
     # check what deployments are already downloaded
-    downloaded <- tibble(file = list.files(sp_dir)) |> 
-      mutate(
-        study_id = bit64::as.integer64(str_split_i(file, "_", 1)), 
-        individual_id = bit64::as.integer64(str_split_i(file, "_", 3)), 
-        deployment_id = bit64::as.integer64(str_split_i(file, "_", 5))
-      ) 
+    downloaded <- downloaded_df |> 
+      filter(species == sp)
     
     # account to use when downloading data
     account <- unique(deployment_info$account)
@@ -343,7 +373,7 @@ download_report <- deployments_filtered |>
     # specifying study and individual that we want to download
     study_id <- unique(deployment_info$study_id)
     
-    print(paste(sp, which(study_id == studies), "|", lengs))
+    print(paste(sp, which(study_id == studies), "|", ls))
 
     # getting individual ids
     ind_local <- unique(deployment_info$individual_local_identifier) |>
