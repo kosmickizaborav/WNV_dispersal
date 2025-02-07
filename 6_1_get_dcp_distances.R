@@ -5,37 +5,37 @@
 
 # INFO --------------------------------------------------------------------
 
-#' This script is used to generate the distances between the consecutive nights
-#' as well as the maximum distances reached during the day.
+#' This script is used to generate the distances between all the points 
+#' available during night and day periods, and calculate median position for 
+#' each
 #' INPUT:
-#' - libraries needed
 #' - sp and sp_dir: species and its folder 
 #' - files and lfl: list of the files to be processed, and their number 
 #' - limits for day and night: day_start, day_end
 #' - cols_of_interest, day_lim: columns of interest and the day limit
-#' 
-#'  **SECTION 1 - calculate night steps**
-#'  **SECTION 2 - calculate day steps**
 #'  
-#'  The output is saved in the 6_distances folder as night and day steps
 
-# define output dataframe
-dcp_df <- tibble()
+# 0 - Load libraries -----------------------------------------------------
 
+library(tidyverse)
+library(here)
 
-# Loop through all deployments --------------------------------------------
+# 1 - Function: get_dcp_df ------------------------------------------------
 
-
-for(fin in files){
+# Function to process each file
+get_dcp_df <- function(
+    fin, 
+    day_lim = NULL, 
+    cols_of_interest = NA,
+    dir = here(sp_dir, "5_resampled")
+){
   
-  print(paste(sp, which(fin == files), "|", lfl))
-  
-  track <- here(sp_dir, "5_resampled", fin) |> 
+  track <- here(dir, fin) |> 
     read_rds() |> 
     select(x_, y_, t_, all_of(c(cols_of_interest, day_lim))) |> 
-    filter(!if_all(all_of(c("day_start", "day_end")), ~is.na(.))) 
+    filter(!if_all(all_of(c("day_start", "day_end")), ~is.na(.)))
   
-  if(nrow(track) > 0){
+  if (nrow(track) > 0) {
     
     dcp_track <- track |>
       # adding day and night parameters
@@ -70,8 +70,6 @@ for(fin in files){
       group_split(dcp) |> 
       map(~{
         
-        # 1 - For each dcp calculate distances and median coordinates ---------
-        
         dcp_one <- .x 
         
         # calculate median location of during the day_cycle_period
@@ -104,39 +102,24 @@ for(fin in files){
                 starts_with("dist"), ~ifelse(is.numeric(.x), .x, NA)
               )
             )
+          
         }
-        
       }) |>  # map period
-      bind_rows() |> 
+      list_rbind() |> 
       mutate(
         track_file = fin, 
         dcp_available = T
       )
     
-  } else{ # close if track 
+  } else {
     
     dcp_track <- tibble(
       track_file = fin, 
       n_locs = NA, 
-      dcp_available = F
+      dcp_available = FALSE
     )
-  
+    
   }
   
-  
-  dcp_df <- dcp_df |> 
-    bind_rows(dcp_track)
-  
-  rm(track, dcp_track)
+  return(dcp_track)
 }
-
-
-# Write output files -------------------------------------------------------------
-
-# save the track
-dcp_df |> 
-  write_rds(here(sp_dir, "6_distances", dcp_file))
-
-rm(dcp_df)
-gc(verbose = F)
-

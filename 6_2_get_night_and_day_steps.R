@@ -23,14 +23,28 @@
 all_night_steps <- tibble()
 all_day_steps <- tibble()
 
-# Loop through all files --------------------------------------------------
 
-# loop through all resampled deployments
-for(fin in files){
+# 0 - load libraries ------------------------------------------------------
+
+# Load required libraries
+library(tidyverse)
+library(sf)
+library(amt)
+
+# 1 - Function: get_night_day_steps ----------------------------------------
+
+
+get_night_day_steps <- function(
+    fin, 
+    day_lim = NULL, 
+    cols_of_interest = NA, 
+    # for night steps
+    resample_rate = hours(24),
+    resample_tolerance = hours(2),
+    dir = here(sp_dir, "5_resampled")
+    ){
   
-  print(paste(sp, which(fin == files), "|", lfl))
-  
-  track <- here(sp_dir, "5_resampled", fin) |> 
+  track <- here(dir, fin) |> 
     read_rds() |> 
     select(x_, y_, t_, all_of(c(cols_of_interest, day_lim))) |> 
     # proceed only if we have day and night limit 
@@ -60,150 +74,128 @@ for(fin in files){
     filter(!if_all(all_of(c("day_start", "day_end")), ~is.na(.))) |> 
     select(-date, -day_start, -day_end)
   
-  if(sum(track$day_period == "night") >= 3){
+  
+  if (sum(track$day_period == "night") < 3) {
     
-    # 1 - Calculate night steps -----------------------------------------------
-
-    night_steps <- track |> 
-      filter(day_period == "night") |> 
-      track_resample(
-        rate = resample_rate,
-        tolerance = resample_tolerance
-      ) |> 
-      filter_min_n_burst(min_n = 3) |>
-      # keep columns from the start, so that we have the same day
-      # cycle in night and days later, if we would keep info for the end
-      # it would point to the next day
-      steps_by_burst(lonlat = T, keep_cols = 'start') 
+    return(
+      list(
+        night_steps = tibble(track_file = fin, night_steps_available = F),
+        day_steps = tibble(track_file = fin, day_steps_calculated = F)
+      ) 
+    )
     
-    if(nrow(night_steps) == 0){
-      
-      # if there is no steps, just keep the file name, and skip the loop
-      all_night_steps <- all_night_steps |> 
-        bind_rows(
-          tibble(
-            track_file = fin, 
-            night_steps_available = F, 
-          )
-        )
-      
-      next
-      
-    } else{ # == if night_steps != 0
-      
-      # add file name and step id to the night steps 
-      # and join them to the rest of the data for the species
-      night_steps <- night_steps |> 
-        mutate(
-          track_file = fin,
-          step_id = str_c("b", burst_, "_s", 1:n()), 
-          night_steps_available = T
-        )
-      
-      # save night steps
-      all_night_steps <- all_night_steps |>
-        bind_rows(night_steps)
-      
+  }
+  
+  # get night steps
+  night_steps <- track |> 
+    filter(day_period == "night") |> 
+    track_resample(
+      rate = resample_rate,
+      tolerance = resample_tolerance
+    ) |> 
+    filter_min_n_burst(min_n = 3) |>
+    # keep columns from the start, so that we have the same day
+    # cycle in night and days later, if we would keep info for the end
+    # it would point to the next day
+    steps_by_burst(lonlat = T, keep_cols = 'start') 
+  
+  if(nrow(night_steps) == 0){
     
+    # if there is no steps, just keep the file name
+    return(
+      list(
+        night_steps = tibble(track_file = fin, night_steps_available = F),
+        day_steps = tibble(track_file = fin, day_steps_calculated = F)
+      ) 
+    )
+    
+  }
+  
+  # add file name and step id to the night steps 
+  # and join them to the rest of the data for the species
+  night_steps_out <- night_steps |> 
+    mutate(
+      track_file = fin,
+      step_id = str_c("b", burst_, "_s", 1:n()), 
+      night_steps_available = T, 
+      .by = burst_
+    )
+  
+  rm(night_steps)
+  
+  # 2 - Calculate day steps -----------------------------------------------
+  
+  # keep only columns relevant for calculating day steps
+  night_steps <- night_steps_out |> 
+    select(
+      t1_, t2_, x1_, y1_, step_id, track_file, day_cycle,
+      all_of(cols_of_interest)
+    ) 
+  
+  track <- track |> 
+    select(t_, x_, y_, day_period)
+  
+  # calculate day steps by taking each night step
+  # subsample track to all points between the two points of the step, 
+  # calculate distance to all points available, and stats
+  # keep only the last point (the one with the highest distance)
+  day_steps <- night_steps |> 
+    st_as_sf(
+      coords = c("x1_", "y1_"), crs = get_crs(track), remove = F
+    ) |> 
+    group_split(step_id) |> 
+    map(~{
       
-      # 2 - Calculate day steps -----------------------------------------------
+      step_df <- .x 
       
-      
-      # keep only columns relevant for calculating day steps
-      night_steps <- night_steps |> 
-        select(
-          t1_, t2_, x1_, y1_, step_id, track_file, day_cycle,
-          all_of(cols_of_interest)
-        ) 
-      
-      track <- track |> 
-        select(t_, x_, y_, day_period)
-      
-      # calculate day steps by taking each night step
-      # subsample track to all points between the two points of the step, 
-      # calculate distance to all points available, and stats
-      # keep only the last point (the one with the highest distance)
-      day_steps <- night_steps |> 
+      day_step_df <- track |> 
+        filter(t_ > step_df$t1_, t_ <= step_df$t2_) |>
         st_as_sf(
-          coords = c("x1_", "y1_"), crs = get_crs(track), remove = F
-        ) |> 
-        group_split(step_id) |> 
-        map(~{
-          
-          step_df <- .x 
-          
-          day_step_df <- track |> 
-            filter(t_ > step_df$t1_, t_ <= step_df$t2_) |>
-            st_as_sf(
-              coords = c("x_", "y_"), crs = get_crs(track), remove = F
-            ) |>
-            mutate(sl_ = st_distance(geometry, step_df)[,1]) |>  
-            st_drop_geometry() |> 
-            # remove the points that fall during the night
-            # in case we selected the t2_ from the night step 
-            filter(day_period == "day") 
-          
-          if(nrow(day_step_df) > 0){
-            
-            day_step_df |> 
-              # odrder by distance and time
-              arrange(sl_, desc(t_)) |> 
-              mutate(
-                sl_min = min(sl_, na.rm = T),
-                sl_mean = mean(sl_, na.rm = T),
-                sl_median = median(sl_, na.rm = T), 
-                sl_n_locs = n()
-              ) |> 
-              # take the last value (highest sl_ /and earliest t2_)
-              slice_tail(n = 1) |> 
-              mutate(
-                across(
-                  starts_with("sl_"), ~ifelse(is.numeric(.x), .x, NA)
-                )
-              ) |> 
-              # adding all relevant columns
-              bind_cols(
-                step_df |> 
-                  select(-t2_) |> 
-                  st_drop_geometry()
-              ) |> 
-              rename_with(
-                ~str_replace(.x, "_$", "2_"), all_of(matches("[txy]_$"))
-              ) 
-          } else{
-            
-            step_df |> 
-              select(-t2_) |> 
-              st_drop_geometry() |> 
-              mutate(sl_ = NA)
-            
-          }
-          
-        }) |>  # close map step_id
-        bind_rows() 
+          coords = c("x_", "y_"), crs = get_crs(track), remove = F
+        ) |>
+        mutate(sl_ = st_distance(geometry, step_df)[,1]) |>  
+        st_drop_geometry() |> 
+        # remove the points that fall during the night
+        # in case we selected the t2_ from the night step 
+        filter(day_period == "day") 
       
-      # merge to the list of all steps
-      all_day_steps <- all_day_steps |> 
-        bind_rows(day_steps)
+      if(nrow(day_step_df) > 0){
+        
+        day_step_df |> 
+          # odrder by distance and time
+          arrange(sl_, desc(t_)) |> 
+          mutate(
+            sl_min = min(sl_, na.rm = T),
+            sl_mean = mean(sl_, na.rm = T),
+            sl_median = median(sl_, na.rm = T), 
+            sl_n_locs = n()
+          ) |> 
+          # take the last value (highest sl_ /and earliest t2_)
+          slice_tail(n = 1) |> 
+          mutate(
+            across(
+              starts_with("sl_"), ~ifelse(is.numeric(.x), .x, NA)
+            )
+          ) |> 
+          # adding all relevant columns
+          bind_cols(step_df |> select(-t2_) |> st_drop_geometry()) |> 
+          rename_with(
+            ~str_replace(.x, "_$", "2_"), all_of(matches("[txy]_$"))
+          ) 
+      } else{
+        
+        step_df |> 
+          select(-t2_) |> 
+          st_drop_geometry() |> 
+          mutate(sl_ = NA)
+        
+      }
       
-      rm(day_steps, night_steps, track)
-      
-    } # close else
-    
-  } # close if sum(track$day_period == "night") >= 3
-
-} # close for fin in files
+    }) |>  # close map step_id
+    list_rbind() 
   
- 
-
-# Write output files -------------------------------------------------------------
-
-all_night_steps |> 
-  write_rds(here(sp_dir, "6_distances", night_file))
+  return(list(night_steps = night_steps_out, day_steps = day_steps))
   
-all_day_steps |> 
-  write_rds(here(sp_dir, "6_distances", day_file))
+} 
+  
 
-
-rm(all_day_steps, all_night_steps)
-gc()

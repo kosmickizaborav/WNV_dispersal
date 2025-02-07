@@ -81,3 +81,35 @@ custom_scientific <- function(x, fixed_exp = NA) {
   parse(text = ifelse(x < 10, x, paste0(base, "%*% 10^", exponent)))
   
 }
+
+
+
+# 3 - Function: get_tracks_and_points -------------------------------------
+
+get_track_and_points <- function(df, in_crs = 4326){
+  
+  points <- df |> 
+    mutate(tb_id = str_c(dense_rank(track_file), "_", burst_)) |> 
+    group_split(tb_id) |> 
+    map(~{
+      tibble(
+        lon = c(.x$x1_, .x$x2_[nrow(.x)]),
+        lat = c(.x$y1_, .x$y2_[nrow(.x)]),
+        tb_id = unique(.x$tb_id),
+        y = as.factor(year(c(.x$t1_, .x$t2_[nrow(.x)])))
+      )
+    }) |>  
+    list_rbind() |> 
+    st_as_sf(coords = c("lon", "lat"), crs = in_crs)
+  
+  tracks <- points |> 
+    summarize(
+      geometry = st_combine(geometry),
+      y = y[1],
+      .by = tb_id
+    ) |> 
+    mutate(geometry = st_cast(geometry, "LINESTRING"))
+  
+  return(list(tracks = tracks, points = points))
+}
+
