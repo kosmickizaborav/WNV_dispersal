@@ -1,3 +1,25 @@
+#' ---
+#' title: "Plotting steps in time and space"
+#' output: github_document
+#' ---
+
+# INFO --------------------------------------------------------------------
+
+#'  **SECTION 1 - Function: get_palette**
+#'  helper function to getting and standardizing the colors across years
+#'  **SECTION 2 - Function: plot_steps_timeline**
+#'  plots the timeline of the bursts that were used to calculate the steps. 
+#'  in this way we see the distribution of the daya trhough time and seasons.
+#'  under the timeline, is ploted total number of steps available per day of 
+#'  a year. 
+#'  **SECTION 3 - Function: expand_bbox**
+#'  helper function for expanding the bbox of a map
+#'  **SECTION 4 - Function: plot_on_world_map**
+#'  plots the points used to calculate steps on the world map. in this way
+#'  we see the spatial distribution of the points used
+#'  **SECTION 5 - Plot for every species**
+#'  generate plot for every species and every night steps file we have 
+
 
 # 0 - Load packages -------------------------------------------------------
 
@@ -6,7 +28,6 @@ library(here)
 library(paletteer)
 library(rnaturalearth)
 library(sf)
-library(ggmagnify)
 library(patchwork)
 
 # getting the species of interest
@@ -14,37 +35,6 @@ target_sp <- here("Data", "1_downloadable_studies_deployments_filtered.rds") |>
   read_rds() |>
   distinct(species) |> 
   as_vector()
-
-sp <- target_sp[2]
-
-sp_dir <- here("Data",  "Studies", str_replace(sp, " ", "_"))
-files <- here(sp_dir, "6_distances_for") |> 
-  list.files()
-
-
-night_files <- files[str_detect(files, "2_all_tracks_night_steps_")]
-
-night_steps <- night_files[1] |> 
-  map(~{
-    
-    here(sp_dir, "6_distances", .x) |> 
-      read_rds() |> 
-      mutate(day_lim = str_remove_all(.x, "2_all_tracks_night_steps_|\\.rds")) |> 
-      filter(night_steps_available == T) |> 
-      mutate(
-        day_cycle = as.Date(day_cycle, format = "%d%m%Y"), 
-        yd = yday(day_cycle),
-        m = month(day_cycle), 
-        d = day(day_cycle), 
-        y = year(day_cycle)
-      )
-    
-  }) |> 
-  list_rbind()
-
-
-
-
 
 
 # 1 - Function: get_palette -----------------------------------------------
@@ -63,7 +53,6 @@ get_palette <- function(df, y = y){
   return(pall)
 }
 
-pal <- get_palette(df = night_steps, y = y)
 # 2 - Function: plot_steps_timeline ---------------------------------------
 
 plot_steps_timeline <- function(df = NULL, pal = NULL){
@@ -92,7 +81,7 @@ plot_steps_timeline <- function(df = NULL, pal = NULL){
   rm(df)
 
   id_max <- max(df_bursts$id)
-  id_buff <- round(id_max*0.2)
+  id_buff <- round(id_max/5)
   
   # generate dataframe for plotting edges of each month
   month_limits <- tibble(year = 2020, month = 1:12) |> 
@@ -119,12 +108,13 @@ plot_steps_timeline <- function(df = NULL, pal = NULL){
       # using this instead of max(id) to avoid white gaps
       id_max = c(id_min[-1], id_max),
       id_mid = id_min + (id_max - id_min)/2,
-      y_lab = if_else(n_tracks > id_buff, y, "")
+      y_lab = if_else(n_tracks > id_buff | n_tracks > mean(n_tracks), y, "")
     )
   
   ptl <- ggplot() +
     geom_hline(aes(yintercept = id_max)) +
     geom_vline(aes(xintercept = 1)) +
+    # plotting bursts from start to end day of the year
     geom_segment(
       data = df_bursts,
       aes(
@@ -135,6 +125,7 @@ plot_steps_timeline <- function(df = NULL, pal = NULL){
       linewidth = 2, 
       alpha = 0.7
     ) +
+    # show year limits in color boxes on the right side
     geom_rect(
       data = year_limits,
       aes(
@@ -152,6 +143,7 @@ plot_steps_timeline <- function(df = NULL, pal = NULL){
       hjust = 0.5,
       vjust = 0.5
     ) +
+    # draw lines deliniating each month
     geom_segment(
       data = month_limits, 
       aes(x = last_yd, xend = last_yd, y = id_min, yend = id_max), 
@@ -173,8 +165,8 @@ plot_steps_timeline <- function(df = NULL, pal = NULL){
     scale_fill_manual(values = pal) +
     theme_void() +
     labs(
-      y = "available track bursts per deployment", 
-      title = "Distribution of night steps in time"
+      y = "track bursts \n per deployment", 
+      title = "Distribution of data across years"
     ) +
     theme(
       axis.title.y = element_text(angle = 90, vjust = 0.5),
@@ -196,7 +188,7 @@ plot_steps_timeline <- function(df = NULL, pal = NULL){
       expand = c(0, 0), limits = c(0, max(count_df$step_count)+1)
     ) +
     theme_bw() +
-    labs(x = "day of the year", y = "total step count") +
+    labs(x = "day of the year", y = "steps \nper day") +
     theme(
       plot.margin = margin(t = 0, r = 0, b = 1, l = 1, unit = "mm"), 
       axis.ticks = element_blank(),
@@ -209,10 +201,6 @@ plot_steps_timeline <- function(df = NULL, pal = NULL){
   
   pout <- ptl/psc + 
     plot_layout(heights = c(2, 1))
-    # plot_annotation(
-    #   title = "Distribution of night steps in time", 
-    #   theme = theme(plot.title = element_text(hjust = 0.5))
-    # )
   
   return(pout)
   
@@ -220,7 +208,7 @@ plot_steps_timeline <- function(df = NULL, pal = NULL){
 
 
 
-# 4 - Function: expand_bbox -----------------------------------------------
+# 3 - Function: expand_bbox -----------------------------------------------
 
 # Function to expand bbox by a given degree
 expand_bbox <- function(bbox, deg) {
@@ -232,8 +220,7 @@ expand_bbox <- function(bbox, deg) {
 }
 
 
-# 5 - Function: plot_on_world_map -----------------------------------------
-
+# 4 - Function: plot_on_world_map -----------------------------------------
 
 plot_on_world_map <- function(df, in_crs = 4326, pal = NULL){
   
@@ -259,12 +246,6 @@ plot_on_world_map <- function(df, in_crs = 4326, pal = NULL){
   # main plot
   mm <- ggplot() + 
     geom_sf(data = world, fill = "white") + 
-    # geom_sf(
-    #   data = ns_tracks, 
-    #   aes(group = tb_id, color = y), 
-    #   alpha = 0.5,
-    #   linewidth = 2
-    # ) +
     geom_sf(data = ns_points, aes(color = y), alpha = 0.5, size = 1.5) +
     coord_sf(
       xlim = c(ns_bbox$xmin, ns_bbox$xmax),
@@ -283,14 +264,14 @@ plot_on_world_map <- function(df, in_crs = 4326, pal = NULL){
       panel.border = element_rect(color = "black", fill = NA, linewidth = 1)
     )
   
-  # generate the poligon that will "zoom in from the world map
+  # generate the polygon that will "zoom in from the world map
   zoom_pol <- matrix(
     c(
-      ns_bbox$xmax, ns_bbox$ymax,  # First point (X, Y)
-      180, 90,  # Second point (X, Y)
-      180, -90, # Third point (X, Y)
-      ns_bbox$xmax, ns_bbox$ymin,  # Fourth point (X, Y)
-      ns_bbox$xmax, ns_bbox$ymax # close the loop
+      ns_bbox$xmax, ns_bbox$ymax,  
+      180, 90,  
+      180, -90, 
+      ns_bbox$xmax, ns_bbox$ymin, 
+      ns_bbox$xmax, ns_bbox$ymax 
     ),
     ncol = 2, 
     byrow = TRUE
@@ -321,7 +302,8 @@ plot_on_world_map <- function(df, in_crs = 4326, pal = NULL){
     ) +
     coord_sf(xlim = c(-180, 180), ylim = c(-90, 90), expand = F) +
     theme_void() +
-    labs(title = "Distribution of night steps in space") +
+    labs(
+      title = "Distribution of data in space") +
     theme(
       plot.margin = margin(0, 0, 0, 0, unit = "cm"), 
       panel.spacing = unit(0, "cm"), 
@@ -329,143 +311,72 @@ plot_on_world_map <- function(df, in_crs = 4326, pal = NULL){
     )
 
   pout <- (wm + mm) 
-    # plot_annotation(
-    #   title = "Spatial distribution of night steps", 
-    #   theme = theme(plot.title = element_text(hjust = 0.5))
-    # )
   
   return(pout)
 }
 
 
-
-# 5 - Function: plot_step_count -------------------------------------------
-
+# 5 - Plot for every species ----------------------------------------------
 
 
+target_sp |> 
+  map(~{
+    
+    sp <- .x
+    
+    sp_dir <- here("Data",  "Studies", str_replace(sp, " ", "_"))
+    files <- here(sp_dir, "6_distances") |> 
+      list.files(pattern = "2_all_tracks_night_steps_")
+    
+    files |> 
+      map(~{
+        
+        fin <- .x
+        fout <- str_c("6_3_plot_", str_remove(fin, ".rds"), ".pdf")
+        
+        night_steps <- here(sp_dir, "6_distances", fin) |> 
+          read_rds() |> 
+          filter(night_steps_available == T) |> 
+          mutate(
+            day_cycle = as.Date(day_cycle, format = "%d%m%Y"), 
+            yd = yday(day_cycle),
+            m = month(day_cycle), 
+            d = day(day_cycle), 
+            y = year(day_cycle)
+          )
+        
+        # palette that will indicate different years
+        pal <- get_palette(night_steps, y = y)
+        
+        # plots
+        wmap <- plot_on_world_map(night_steps, pal = pal)
+        tl <- plot_steps_timeline(night_steps, pal = pal)
+        
+        pout <- wmap/tl + 
+          plot_annotation(
+            title = str_c(
+              sp, "\n",
+              "spatial and temporal distribution of tracking data used to obtain night steps"
+            ), 
+            caption = str_c(
+              "file: ", fin, "\n",
+              "color of lines in timeline and points in map indicate year, see timeline for years with the most data"
+            ),
+            theme = theme(plot.title = element_text(face = "bold", hjust = 0.5))
+          ) +
+          plot_layout(heights = c(1.5, 1))
+          
+        # save the plots
+        ggsave(
+          here(sp_dir, "Graphs", fout), 
+          pout, 
+          width = 25, height = 20, units = "cm"
+        )
+        
 
-pall <- get_palette(night_steps$y)
-
-wmap <- night_steps |> plot_on_world_map(pal = pal)
-
-tl <- night_steps |> 
-  plot_steps_timeline(pal = pal)
-
-
-wmap/tl + plot_layout(widths = c(2, 1))
-
-# define palette for the graph
-colp <- paletteer_d("MoMAColors::Lupi")
-# define breaks for the colors 
-col_break <- c(1, 5, 10, 25, 50, 75, 100)
-
-
-
-
-night_steps |> 
-  plot_steps_timeline(pall = pall)
-
-# original plot to save just in case
-# 
-# ptl <- ggplot() +
-#   geom_hline(aes(yintercept = id_max)) +
-#   geom_segment(
-#     data = df_bursts,
-#     aes(
-#       x = brs_start, xend = brs_end, 
-#       y = id, yend = id,
-#       color = y
-#     ),
-#     linewidth = 2, 
-#     alpha = 0.7
-#   ) +
-#   geom_rect(
-#     data = year_limits,
-#     aes(
-#       xmin = -20, xmax = 1,
-#       ymin = id_min, ymax = id_max,
-#       fill = y
-#     ),
-#     color = "gray3333",
-#     alpha = 0.7
-#   ) +
-#   geom_text(
-#     data = year_limits,
-#     aes(x = -10, y = id_mid, label = y_lab),
-#     color = "gray3333",
-#     hjust = 0.5,
-#     vjust = 0.5
-#   ) +
-#   geom_segment(
-#     data = month_limits, 
-#     aes(x = last_yd, xend = last_yd, y = id_min, yend = id_max), 
-#     color = "gray3333"
-#   ) +
-#   geom_rect(
-#     data = month_limits,
-#     aes(xmin = first_yd, xmax = last_yd, ymin = -id_buff, ymax = 1), 
-#     color = "gray3333", 
-#     fill = "white"
-#   ) +
-#   geom_text(
-#     data = month_limits, aes(x = mid_yd, y = -id_buff/2, label = m_lab),
-#     hjust = 0.5, vjust = 0
-#   ) +
-#   scale_x_continuous(expand = c(0,0)) +
-#   scale_y_continuous(expand = c(0,0)) +
-#   scale_color_manual(values = pal) +
-#   scale_fill_manual(values = pal) +
-#   # labs(
-#   #   x = "time of the year", 
-#   #   y = "available night steps per deployment"
-#   # ) +
-#   theme_minimal() +
-#   theme(
-#     axis.text = element_blank(),
-#     panel.grid.minor = element_blank(),
-#     panel.grid.major = element_blank(),
-#     legend.position = "none", 
-#     plot.margin = margin(t = 10, r = 10, b = 10, l = 10)
-#   ) +
-#   coord_cartesian(clip = "off")
-# 
-
-# yb <- year_limits |> 
-#   ggplot() +
-#   geom_rect(
-#     aes(
-#       xmin = -20, xmax = 1, 
-#       ymin = id_min, ymax = id_max,
-#       fill = y
-#     ), 
-#     color = "gray33", 
-#     alpha = 0.7
-#   ) +
-#   geom_text(
-#     data = year_limits,
-#     aes(x = -10, y = id_mid, label = y_lab),
-#     color = "black",
-#     hjust = 0.5,
-#     vjust = 0.5
-#   ) +
-#   scale_fill_manual(values = pall) +
-#   scale_y_continuous(expand = c(0,0), lim = c(-id_buff, id_max)) +
-#   scale_x_continuous(expand = c(0,0)) +
-#   theme_void() +
-#   theme(
-#     legend.position = "none", 
-#     plot.margin = margin(t = 1, r = 0, b = 0, l = 0, unit = "mm"), 
-#     panel.spacing = unit(0, "cm")
-#   ) 
-
-# plot_step_count <- function(df){
-#   
-#   df |> 
-#     summarize(step_count = n(), .by = yd) |> 
-#     ggplot() + 
-#     geom_step(aes(y = step_count, x = yd)) +
-#     scale_x_continuous(expand = c(0,0), limits = c(1, 366)) +
-#     theme_bw() +
-#     labs(x = "day of the year", y = "total step count")
-#   
-# }
+      })
+    
+    print(paste(sp, "DONE!"))
+      
+    
+  })
