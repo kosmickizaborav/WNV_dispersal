@@ -126,7 +126,12 @@ for(sp in target_sp){
 
 # 1 - Get distances per day_cycle_period and related steps -------------------
 
-    if(!file.exists(here(sp_dir, "6_distances", dcp_file))){
+
+    file_check <- here(
+      sp_dir, "6_distances", c(dcp_file, dcp_night_file, dcp_day_file)
+      )
+    
+    if(sum(!file.exists(file_check)) > 0){
       
       # get the dcp file and save it
       dcp_df <- files |> 
@@ -136,7 +141,7 @@ for(sp in target_sp){
           
           here(sp_dir, "5_resampled", fin) |> 
             read_rds() |> 
-            get_dcp_df(day_lim, coi) |> 
+            get_dcp_df(day_lim = day_lim, cols_of_interest = coi) |> 
             mutate(track_file = fin)
           
         }) |> 
@@ -152,17 +157,22 @@ for(sp in target_sp){
           
           print(paste(sp, which(unique(.x$track_file) == files), "|", lfl))
           
-          .x |> 
-            filter(is.na(!dcp))
-            separate_wider_delim(
-              cols = dcp, delim = "_", names = c("day_cycle", "day_period")
-            ) |> 
-            make_track(
-              x_median, y_median, t_median, crs = crs_dcp, all_cols = T
-            ) |> 
-            get_night_day_steps(
-              get_day_cycle = F, cols_of_interest = coi_dcp
-            )
+          if(sum(.x$dcp_available == T) > 0){
+            
+            .x |> 
+              separate_wider_delim(
+                cols = dcp, delim = "_", names = c("day_cycle", "day_period")
+              ) |> 
+              make_track(
+                x_median, y_median, t_median, crs = crs_dcp, all_cols = T
+              ) |> 
+              get_night_day_steps(
+                get_day_cycle = F, cols_of_interest = coi_dcp
+              )
+            
+          } else{
+            .x
+          }
           
         }) 
       
@@ -189,8 +199,9 @@ for(sp in target_sp){
 
 # 2 - Get night and day steps ---------------------------------------------
 
-    if(!file.exists(here(sp_dir, "6_distances", night_file)) | 
-       !file.exists(here(sp_dir, "6_distances", day_file))){
+    file_check <- here(sp_dir, "6_distances", c(night_file, day_file))
+    
+    if(sum(!file.exists(file_check)) > 0){
         
          daily_df <- files |> 
            map(~{
@@ -200,7 +211,7 @@ for(sp in target_sp){
              
              here(sp_dir, "5_resampled", fin) |> 
                read_rds() |>
-               get_night_day_steps(day_lim, cols_of_interest = coi) 
+               get_night_day_steps(day_lim = day_lim, cols_of_interest = coi) 
              
            }) |> 
            set_names(files)

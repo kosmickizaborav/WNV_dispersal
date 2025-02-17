@@ -77,7 +77,7 @@ get_dcp_df <- function(
 ){
   
   track <- df |> 
-    select(x_, y_, t_, all_of(c(cols_of_interest, day_lim))) |> 
+    select(x_, y_, t_, any_of(c(cols_of_interest, day_lim))) |> 
     filter(!if_all(all_of(c("day_start", "day_end")), ~is.na(.)))
   
   if(nrow(track) > 0) {
@@ -154,24 +154,24 @@ get_night_day_steps <- function(
     cols_of_interest = NULL, 
     # for night steps
     resample_rate = hours(24),
-    resample_tolerance = hours(11.9)
+    resample_tolerance = hours(12)
 ){
   
   if(get_day_cycle == T){
     
     track <- df |> 
-      select(x_, y_, t_, all_of(c(cols_of_interest, day_lim))) |> 
+      select(x_, y_, t_, any_of(c(cols_of_interest, day_lim))) |> 
       add_day_cycle()
     
   } else{
     
     track <- df |> 
-      select(x_, y_, t_, day_cycle, day_period, all_of(c(cols_of_interest)))
+      select(x_, y_, t_, day_cycle, day_period, any_of(c(cols_of_interest)))
     
   }
   
   
-  if(sum(track$day_period == "night") < 3){
+  if(sum(track$day_period == "night", na.rm = T) < 3){
     
     return(
       list(
@@ -226,7 +226,7 @@ get_night_day_steps <- function(
   # calulate day steps
   day_steps <- night_steps |> 
     select(
-      t1_, t2_, x1_, y1_, step_id, day_cycle, all_of(cols_of_interest)
+      t1_, t2_, x1_, y1_, step_id, day_cycle, any_of(cols_of_interest)
     ) |> 
     st_as_sf(
       coords = c("x1_", "y1_"), crs = get_crs(track), remove = F
