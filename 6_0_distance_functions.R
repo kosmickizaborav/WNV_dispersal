@@ -220,6 +220,24 @@ get_night_day_steps <- function(
   
   # keep only columns relevant for calculating day steps
   
+  day_steps <- get_day_steps(
+    night_steps = night_steps, 
+    track = track,
+    cols_of_interest = cols_of_interest
+  )
+  
+  return(list(night_steps = night_steps, day_steps = day_steps))
+  
+} 
+
+
+
+# 3 - FUNCTION: get_day_steps ---------------------------------------------
+
+get_day_steps <- function(night_steps, track, cols_of_interest = NULL){
+  
+  # keep only columns relevant for calculating day steps
+  
   track <- track |> 
     select(t_, x_, y_, day_period)
   
@@ -273,22 +291,26 @@ get_night_day_steps <- function(
           bind_cols(step_df |> select(-t2_) |> st_drop_geometry()) |> 
           rename_with(
             ~str_replace(.x, "_$", "2_"), all_of(matches("[txy]_$"))
-          ) 
+          ) |> 
+          mutate(day_step_available = T)
         
       } else{
         
         step_df |> 
           select(-t2_) |> 
           st_drop_geometry() |> 
-          mutate(sl_ = NA)
+          mutate(
+            sl_ = NA, 
+            day_step_available = F
+          )
         
       }
       
     }) |>  # close map step_id
     list_rbind() 
   
-  return(list(night_steps = night_steps, day_steps = day_steps))
+  return(day_steps)
   
-} 
+}
 
 
