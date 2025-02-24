@@ -44,7 +44,7 @@ target_sp |>
   })
 
 
-# 0 - Parameters for functions --------------------------------------------
+# Parameters for functions -------------------------------------------------
 
 # keeping just columns of interest
 coi <- c(
@@ -58,7 +58,7 @@ coi_dcp <- c(
 # how do we define day and night (day limits)
 day_limits <- list(
   c(day_start = "nightEnd", day_end =  "night"), 
-  c(day_start = "nauticalDawn", day_end = "nauticalDusk"), 
+  c(day_start = "nauticalDawn", day_end = "nauticalDusk"),
   c(day_start = "dawn", day_end = "dusk")
 )
 
@@ -122,7 +122,14 @@ for(sp in target_sp){
       ".rds"
     )
     
-
+    dcp_day_file_max <- str_c(
+      "4_all_tracks_dcp_max_day_steps_", 
+      day_lim[["day_start"]],
+      "_", 
+      day_lim[["day_end"]], 
+      ".rds"
+    )
+    
 
 # 1 - Get distances per day_cycle_period and related steps -------------------
 
@@ -133,11 +140,14 @@ for(sp in target_sp){
     
     if(sum(!file.exists(file_check)) > 0){
       
+      printout <- "Calculating DCP distances:"
+      
       # get the dcp file and save it
       dcp_df <- files |> 
         map(~{
+          
           fin <- .x
-          print(paste(sp, which(fin == files), "|", lfl))
+          cat(paste(printout, sp, which(fin == files), "|", lfl, "\n"))
           
           here(sp_dir, "5_resampled", fin) |> 
             read_rds() |> 
@@ -151,15 +161,25 @@ for(sp in target_sp){
         list_rbind() |> 
         write_rds(here(sp_dir, "6_distances", dcp_file))
       
+      
+      printout <- "Calculating DCP steps:"
+      
       # calculate step length from calculated median locations at day and night
       dcp_steps <- dcp_df |>  
         map(~{
           
-          print(paste(sp, which(unique(.x$track_file) == files), "|", lfl))
+          dcp_df_one <- .x
           
-          if(sum(.x$dcp_available == T) > 0){
+          cat(
+            paste(
+              printout, 
+              sp,  which(unique(.x$track_file) == files), "|", lfl, "\n"
+            )
+          )
+          
+          if(sum(is.na(dcp_df_one$n_locs)) == 0){
             
-            .x |> 
+            dcp_df_one |> 
               separate_wider_delim(
                 cols = dcp, delim = "_", names = c("day_cycle", "day_period")
               ) |> 
@@ -167,11 +187,13 @@ for(sp in target_sp){
                 x_median, y_median, t_median, crs = crs_dcp, all_cols = T
               ) |> 
               get_night_day_steps(
-                get_day_cycle = F, cols_of_interest = coi_dcp
+                get_day_cycle = F, cols_of_interest = coi_dcp, 
+                resample_rate = hours(24),
+                resample_tolerance = hours(12)
               )
             
           } else{
-            .x
+            dcp_df_one
           }
           
         }) 
@@ -202,36 +224,88 @@ for(sp in target_sp){
     file_check <- here(sp_dir, "6_distances", c(night_file, day_file))
     
     if(sum(!file.exists(file_check)) > 0){
-        
-         daily_df <- files |> 
-           map(~{
-             
-             fin <- .x
-             print(paste(sp, which(fin == files), "|", lfl))
-             
-             here(sp_dir, "5_resampled", fin) |> 
-               read_rds() |>
-               get_night_day_steps(day_lim = day_lim, cols_of_interest = coi) 
-             
-           }) |> 
-           set_names(files)
-         
-         map(daily_df, "night_steps") |>
-           list_rbind(names_to = "track_file") |>
-           write_rds(here(sp_dir, "6_distances", night_file))
-         
-         map(daily_df, "day_steps") |>
-           list_rbind(names_to = "track_file") |>
-           write_rds(here(sp_dir, "6_distances", day_file))
-         
-         rm(daily_df)
-         gc(verbose = F)
-          
-       }
     
+      printout <- "Calculating night and day steps:"
+      
+      daily_df <- files |> 
+        map(~{
+          
+          fin <- .x
+          cat(paste(printout, sp, which(fin == files), "|", lfl, "\n"))
+          
+          here(sp_dir, "5_resampled", fin) |> 
+            read_rds() |>
+            get_night_day_steps(
+              day_lim = day_lim, cols_of_interest = coi, 
+              resample_rate = hours(24),
+              resample_tolerance = hours(12)
+            ) 
+          
+        }) |> 
+        set_names(files)
+      
+      map(daily_df, "night_steps") |>
+        list_rbind(names_to = "track_file") |>
+        write_rds(here(sp_dir, "6_distances", night_file))
+      
+      map(daily_df, "day_steps") |>
+        list_rbind(names_to = "track_file") |>
+        write_rds(here(sp_dir, "6_distances", day_file))
+      
+      rm(daily_df)
+      gc(verbose = F)
+      
+    }
+    
+# 3 - Get max day steps from dcp steps --------------------------------------  
+    
+    file_check <- here(sp_dir, "6_distances", dcp_day_file_max)
+    
+    if(sum(!file.exists(file_check)) > 0){
+      
+      printout <- "Calculating max day steps from DCP steps:"
+      
+      dcp_night_steps <- here(sp_dir, "6_distances", dcp_night_file) |> 
+        read_rds() |> 
+        filter(night_steps_available == T)
+      
+      files <- unique(dcp_night_steps$track_file)
+      lfl <- length(files)
+      
+      dcp_day_steps <- dcp_night_steps |> 
+        group_split(track_file) |>
+        map(~{
+          
+          night_steps <- .x 
+          
+          fin <- unique(night_steps$track_file)
+          cat(paste(printout, sp, which(fin == files), "|", lfl, "\n"))
+          
+          track <- here(sp_dir, "5_resampled", fin) |> 
+            read_rds() |> 
+            select(t_, x_, y_, all_of(day_lim)) |> 
+            add_day_cycle()
+          
+          get_day_steps(
+            night_steps = night_steps, 
+            track = track, 
+            cols_of_interest = "track_file"
+          )
+          
+        }) |> 
+        list_rbind()
+      
+      dcp_day_steps |>
+        write_rds(here(sp_dir, "6_distances", dcp_day_file_max))
+        
+    }
+    
+
+# Done one species one day lim --------------------------------------------
+
     cat(
       paste(
-        "CALCULATION ENDED FOR: \n",
+        "\n\nCALCULATION ENDED FOR: \n",
         "- day starts at:",
         day_lim[["day_start"]],
         "\n- day ends at:",
@@ -242,7 +316,7 @@ for(sp in target_sp){
     
   }
   
-  cat(paste("\n", sp, "DONE!"))
+  cat(paste("\n", sp, "DONE!\n"))
 
 }
 

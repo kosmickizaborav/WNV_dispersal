@@ -112,17 +112,28 @@ plot_steps_count <- function(
     title = NULL, 
     xlab = "day of the year", 
     ylab = "steps per day",
+    leglab = NULL,
     pal = NULL, 
     month_limits = NULL,
-    month_labels = T
+    month_labels = T, 
+    legend_position = "none", 
+    y_expand = expansion(mult = c(0, 0.1))
 ){
   
-  y_max <-  df |> pull({{counts}}) |> max()
+  if(is.null(ylab)){ ylab <- ensym(counts) }
+  if(is.null(leglab)){ leglab <- ensym(color) }
   
+  
+  # check which variables are provided
+  # for checking if linetype is a variable or type of the line
+  line_types <- c(
+    "blank", "solid", "dashed", "dotted", "dotdash", "longdash", "twodash", 
+    as.character(1:6)
+  )
+  color_check <- is_color(as.character(ensym(color)))
+  linetype_check <- as.character(ensym(linetype)) %in% line_types
+
   if(is.null(month_limits)){ month_limits <- get_month_limits() }
-  
-  month_limits <- month_limits |> 
-    mutate(y_max = y_max)
   
   p <- df |> 
     ggplot(aes(y = {{counts}}, x = yd)) + 
@@ -132,14 +143,17 @@ plot_steps_count <- function(
     scale_x_continuous(
       expand = c(0,0), limits = c(1, 366), breaks = seq(1, 366, 14)
     ) +
-    scale_y_continuous(
-      limits = c(0, NA), expand = expansion(mult = c(0, 0.1))
-    ) +
+    scale_y_continuous(limits = c(0, NA), expand = y_expand) +
     theme_bw() +
-    labs(x = xlab, y = ylab, title = title) +
-    theme(legend.position = "none") 
+    labs(x = xlab, y = ylab, title = title, color = leglab) +
+    theme(legend.position = legend_position) 
   
   if(month_labels == T){
+    
+    # the position of the month label
+    y_max <-  df |> pull({{counts}}) |> max()
+    month_limits <- month_limits |> mutate(y_max = y_max)
+    
     p <- p +
       geom_text(
         data = month_limits, 
@@ -148,26 +162,43 @@ plot_steps_count <- function(
       ) 
   }
   
-  if(is_color(as.character(ensym(color)))) {
-
-    # Use a single color for the line
-    p <- p +
-      geom_step(
-        color = color, linewidth = linewidth, alpha = alpha, linetype = linetype
-      )
-
-  } else {
-    # Use the color aesthetic with a palette
-    p <- p +
-      geom_step(
-        aes(y = {{counts}}, color = {{color}}, x = yd),
-        linewidth = linewidth, alpha = alpha, linetype = linetype
-      )
-
+  if(color_check == T){
+    
+    if(linetype_check == T){
+      p <- p +
+        geom_step(
+          color = color, linetype = linetype,
+          linewidth = linewidth, alpha = alpha, 
+        )
+    } else{
+      p <- p +
+        geom_step(
+          aes(linetype = {{linetype}}), color = color, 
+          linewidth = linewidth, alpha = alpha
+        )
+    }
+    
+  } else{
+    
+    if(linetype_check == T){
+      p <- p +
+        geom_step(
+          aes(color = {{color}}), linetype = linetype,
+          linewidth = linewidth, alpha = alpha
+        )
+    } else{
+      
+      p <- p +
+        geom_step(
+          aes(color = {{color}}, linetype = {{linetype}}), 
+          linewidth = linewidth, alpha = alpha
+        )
+    }
+    
     if(!is.null(pal)){ p <- p + scale_color_manual(values = pal) }
-
+    
   }
-
+    
   return(p)
   
 }
@@ -464,8 +495,8 @@ plot_bars <- function(
 # FUNCTION 9: plot_tile_timeline ------------------------------------------
 
 plot_tile_timeline <- function(
-    df, y, fill, month_limits = NULL, 
-    cols = c("#A2DA3CFF", "#EADD17FF", "#8B4F82FF"), 
+    df, y, fill, yd = yd, month_limits = NULL, 
+    pal = c("#A2DA3CFF", "#EADD17FF", "#8B4F82FF"), 
     midp = 0.5, 
     ylab = NULL, 
     flab = NULL, 
@@ -476,18 +507,19 @@ plot_tile_timeline <- function(
   if(is.null(ylab)){ ylab <- ensym(y) }
   if(is.null(flab)){ flab <- ensym(fill) }
   
-  y_lim <- df |> pull({{y}}) |> unique()
+  df <- df |> mutate(yf = as.factor({{y}}))
+  y_lim <- df |> pull(yf) |> unique()
   
   df |> 
     ggplot() +
-    geom_tile(aes(y = {{y}}, x = yd, fill = {{fill}}), color = "black") +
+    geom_tile(aes(y = yf, x = {{yd}}, fill = {{fill}}), color = "black") +
     geom_vline(
       data = month_limits, aes(xintercept = last_yd), color = "gray33"
     ) +
     scale_x_continuous(breaks = seq(1, 366, 14), expand = c(0,0)) +
-    scale_y_continuous(breaks = y_lim, expand = c(0,0), labels = y_lim) +
+    #scale_y_continuous(breaks = y_lim, expand = c(0,0), labels = y_lim) +
     scale_fill_gradient2(
-      midpoint = midp, high = cols[3], mid = cols[2], low = cols[1], 
+      midpoint = midp, high = pal[3], mid = pal[2], low = pal[1], 
     ) +
     theme_bw() +
     labs(y = ylab, x = "day of the year", fill = flab, title = title) +
