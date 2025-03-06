@@ -105,7 +105,7 @@ get_month_limits <- function(
 
 
 plot_steps_count <- function(
-    df, counts, color, 
+    df, counts, color = "#803342FF", 
     linetype = "solid", 
     linewidth = 1.2, 
     alpha = 0.8,
@@ -120,10 +120,6 @@ plot_steps_count <- function(
     y_expand = expansion(mult = c(0, 0.1))
 ){
   
-  if(is.null(ylab)){ ylab <- ensym(counts) }
-  if(is.null(leglab)){ leglab <- ensym(color) }
-  
-  
   # check which variables are provided
   # for checking if linetype is a variable or type of the line
   line_types <- c(
@@ -132,7 +128,11 @@ plot_steps_count <- function(
   )
   color_check <- is_color(as.character(ensym(color)))
   linetype_check <- as.character(ensym(linetype)) %in% line_types
-
+  
+  if(is.null(ylab)){ ylab <- ensym(counts) }
+  if(is.null(leglab)){
+    leglab <- ifelse(color_check == F, ensym(color), ensym(counts))
+  }
   if(is.null(month_limits)){ month_limits <- get_month_limits() }
   
   p <- df |> 
@@ -516,7 +516,9 @@ plot_tile_timeline <- function(
     geom_vline(
       data = month_limits, aes(xintercept = last_yd), color = "gray33"
     ) +
-    scale_x_continuous(breaks = seq(1, 366, 14), expand = c(0,0)) +
+    scale_x_continuous(
+      limits = c(1, 366), breaks = seq(1, 366, 14), expand = c(0,0)
+    ) +
     #scale_y_continuous(breaks = y_lim, expand = c(0,0), labels = y_lim) +
     scale_fill_gradient2(
       midpoint = midp, high = pal[3], mid = pal[2], low = pal[1], 

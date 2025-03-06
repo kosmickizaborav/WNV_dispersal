@@ -292,7 +292,7 @@ get_day_steps <- function(night_steps, track, cols_of_interest = NULL){
           rename_with(
             ~str_replace(.x, "_$", "2_"), all_of(matches("[txy]_$"))
           ) |> 
-          mutate(day_step_available = T)
+          mutate(day_steps_available = T)
         
       } else{
         
@@ -301,7 +301,7 @@ get_day_steps <- function(night_steps, track, cols_of_interest = NULL){
           st_drop_geometry() |> 
           mutate(
             sl_ = NA, 
-            day_step_available = F
+            day_steps_available = F
           )
         
       }

@@ -107,7 +107,7 @@ for(sp in target_sp){
     )
     
     night_file <- str_c(
-      "2_all_tracks_night_steps_", 
+      "1_all_tracks_night_steps_", 
       day_lim[["day_start"]],
       "_", 
       day_lim[["day_end"]], 
@@ -115,7 +115,7 @@ for(sp in target_sp){
     )
     
     day_file <- str_c(
-      "3_all_tracks_max_day_steps_", 
+      "1_all_tracks_max_day_steps_", 
       day_lim[["day_start"]],
       "_", 
       day_lim[["day_end"]], 
@@ -123,7 +123,7 @@ for(sp in target_sp){
     )
     
     dcp_day_file_max <- str_c(
-      "4_all_tracks_dcp_max_day_steps_", 
+      "1_all_tracks_dcp_max_day_steps_", 
       day_lim[["day_start"]],
       "_", 
       day_lim[["day_end"]], 
