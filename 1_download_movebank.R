@@ -359,7 +359,7 @@ deployments_filtered <- deployments |>
   # no manipulation with tracked animals or relocation only
   filter(
     manipulation_type %in% c("none", "relocated") | is.na(manipulation_type)
-  ) |>
+  ) |> 
   select(any_of(c("species", "account", col_deploy)))
 
 # saving data
@@ -399,8 +399,7 @@ deployments_filtered |>
 study_download <- function(
     study_id = NULL, 
     individual_local_identifier = NULL, 
-    sensor_type_id =  c("gps", "sigfox-geolocation"), # c(653, 2299894820)
-    ...
+    sensor_type_id =  c("gps", "sigfox-geolocation") # c(653, 2299894820)
     ) {
 
   # the function gives an error if NULL or NA for individual Local identifier
@@ -409,7 +408,7 @@ study_download <- function(
   if(is.null(individual_local_identifier)){
     
     # it reported errors with the rest of the parameters, so I gave up
-    movebank_download_study(
+    out <- movebank_download_study(
       study_id, 
       sensor_type_id = sensor_type_id,
       remove_movebank_outliers = T,
@@ -420,7 +419,7 @@ study_download <- function(
     
   } else {
     
-    movebank_download_deployment(
+    out <- movebank_download_study(
       study_id, 
       sensor_type_id = sensor_type_id,
       individual_local_identifier = individual_local_identifier,
@@ -432,12 +431,154 @@ study_download <- function(
     
   }
   
-  
+  return(out)
 }
 
 # wrap with safely
 safe_study_download <- safely(study_download)
+
+
+# FUNCTION: study_download_protocol ---------------------------------------
+
+study_download_protocol <- function(
+    account = NULL, 
+    s_id = NULL, 
+    ind_local = NULL,
+    deployment_info = NULL, 
+    data_dir = NULL
+){
   
+  if(!is.null(ind_local)){  cat("\n -individual:", ind_local) }
+  
+  # extract the deployment columns that we want to add to the tracking data
+  deployment_info <- deployment_info |> 
+    select(where(~!all(is.na(.))))
+  
+  ind_id <- unique(deployment_info$individual_id) |>
+    bit64::as.integer64()
+  depl_ids <- unique(deployment_info$deployment_id) |>
+    bit64::as.integer64()
+  sp <- unique(deployment_info$species)
+  
+  # set account to use for download
+  options("move2_movebank_key_name" = account)
+  
+  # download deployments of interest
+  down <- safe_study_download(
+    study_id = s_id,
+    individual_local_identifier = ind_local
+  )
+  
+  df <- down$result 
+  
+  # if there is no data to save/error occurred, return it
+  if(is.null(df)){ 
+    
+    cat("\n---------------an error occurred!---------------")
+    
+    # if there is error with download, save the info
+    download_error_report <- tibble(
+      species = sp, 
+      study_id = s_id,
+      individual_local_identifier = ind_local,
+      individual_id = ind_id,
+      deployment_id = depl_ids,
+      error_download_study = paste(
+        down[["error"]][["message"]], collapse = " "
+      ), 
+      account = account, 
+      downloaded_on = Sys.time()
+    )
+    
+    return(download_error_report)
+    
+  }
+  
+  df <- df |> 
+    # adding id and identifier columns for easier management later
+    # needed to do this step because in one study, 128184877, 
+    # when data for the individual was downloaded, it contained 
+    # only tag_local_identifier and individual_local_identifier, 
+    # but the deployment info only contained individual_local_identifier, 
+    # so when the columns were merged, there was no deployment_id, 
+    # because it couldn't match NA from deployment_info 
+    # with tag_local_identifier in the data
+    left_join(deployment_info) |> 
+    # it was important to add deployment_id check because in some
+    # cases there was an individual with two deployments, but in one
+    # it was manipulated, in the other no
+    filter(
+      !is.na(deployment_id), 
+      individual_id %in% ind_id, 
+      deployment_id %in% depl_ids
+    ) 
+  
+  # if there is no data for the specified deployment, don't save the data
+  # this is done to make sure that we have the deployments and individuals 
+  # that we want
+  if(nrow(df) == 0){
+    
+    cat("\n -deployment id: ", as.character(depl_ids))
+    cat("\n---------------no data for the deployment!---------------")
+    
+    # if there is no data to save
+    no_data_report <- tibble(
+      species = sp, 
+      study_id = s_id,
+      individual_local_identifier = ind_local,
+      individual_id = ind_id,
+      deployment_id = depl_ids,
+      error_download_study = "no data for the specified deployment id", 
+      account = account, 
+      downloaded_on = Sys.time()
+    )
+    
+    return(no_data_report)
+    
+  }
+  
+  saved_report <- df |>
+    # if there are multiple deployments per individual save them separately
+    group_split(deployment_id) |>
+    map(~{
+      
+      # taking out all the columns that have only NA values
+      depl_df <- .x |>
+        select(where(~!all(is.na(.))))
+      
+      depl_id <- unique(depl_df$deployment_id)
+      ind_id <- unique(depl_df$individual_id)
+      
+      # define file name
+      study_file <- str_c(
+        s_id, "_study_", ind_id, "_ind_", depl_id, "_depl.rds"
+      )
+      
+      # save the data
+      depl_df |>
+        write_rds(file = file.path(data_dir, study_file))
+      
+      cat("\n----------deployment:", depl_id, "saved!----------")
+      
+      # save the basic information for download report
+      tibble(
+        species = sp,
+        file = study_file,
+        study_id = s_id,
+        individual_local_identifier = ind_local,
+        individual_id = ind_id,
+        deployment_id = depl_id,
+        n_locs = nrow(depl_df),
+        account = account, 
+        downloaded_on = Sys.time()
+      )
+      
+    }) |>
+    bind_rows()
+  
+  return(saved_report)
+  
+}
 
 # 5 - Download and save deployments ---------------------------------------
 
@@ -458,15 +599,17 @@ downloaded_df <- target_sp |>
         study_id = bit64::as.integer64(str_split_i(file, "_", 1)),
         individual_id = bit64::as.integer64(str_split_i(file, "_", 3)),
         deployment_id = bit64::as.integer64(str_split_i(file, "_", 5)),
-        species = sp
-      )
+        species = sp, 
+        t_down = file.mtime(here(sp_dir, "1_deployments", file))
+      ) 
     
   }) |> 
   bind_rows()
 
     
 # downloading studies one by one
-download_report <- deployments_filtered |>
+download_report_cucu <- deployments_filtered |> 
+  arrange(species) |> 
   select(species, account, ends_with("_identifier"), ends_with("_id")) |> 
   group_split(study_id, individual_local_identifier) |>
   map(~{
@@ -481,128 +624,35 @@ download_report <- deployments_filtered |>
       bit64::as.integer64()
     ind_local <- unique(deployment_info$individual_local_identifier) |> 
       as.character()
-    if(is.na(ind_local)){ ind_local <- NULL}
     
     # folder where the data will be saved
     sp <- unique(deployment_info$species) 
     sp_dir <- here("Data", "Studies",  str_replace(sp, " ", "_"))
     
-    cat(paste(sp, which(s_id == studies), "|", ls, "\n"))
-    cat(paste("individual:", ind_local, "\n"))
+    cat("\n\n", sp, which(s_id == studies), "|", ls)
     
-    # check what deployments are already downloaded
+    if(is.na(ind_local)){ ind_local <- NULL }
+    
     downloaded <- downloaded_df |> 
-      filter(species == sp, study_id == s_id, individual_id == ind_id)
+      filter(species == sp, study_id == s_id, individual_id %in% ind_id)
 
-    
-# 5.1 - IF: data not downloaded -------------------------------------------------
-
+    # IF: data not downloaded
     # check if the individual and study are already downloaded
     if(nrow(downloaded) == 0){
       
-      # set account to use for download
-      options("move2_movebank_key_name" = account)
-      
-      # download deployments of interest
-      down <- safe_study_download(
-        study_id = s_id,
-        individual_local_identifier = ind_local
+      study_download_protocol(
+        account = account, 
+        s_id = s_id, 
+        ind_local = ind_local,
+        deployment_info = deployment_info, 
+        data_dir = here(sp_dir, "1_deployments")
       )
-      
-      df <- down$result
-      
-      
-# 5.2 - IF: download successful -------------------------------------------------
-
-      # if there is some data to save
-      if(!is.null(df)){
-        
-        df <- df |> 
-          filter(!is.na(deployment_id))
-        
-        if(nrow(df) > 0){
-          
-          df |>
-            # if there are multiple deployments per individual save them separately
-            group_split(deployment_id) |>
-            map(~{
-              
-              depl_id <- unique(.x$deployment_id)
-              
-              # define file name
-              study_file <- str_c(
-                s_id, "_study_", ind_id, "_ind_", depl_id, "_depl.rds"
-              )
-              
-              # save the data
-              .x |>
-                write_rds(here(sp_dir, "1_deployments", study_file))
-              
-              cat(paste("----------deployment:", depl_id, "saved!----------\n"))
-              
-              # save the basic information for download report
-              tibble(
-                species = sp,
-                file = study_file,
-                study_id = s_id,
-                individual_local_identifier = ind_local,
-                individual_id = ind_id,
-                deployment_id = depl_id,
-                n_locs = nrow(.x),
-                account = account, 
-                downloaded_at = Sys.time()
-              )
-              
-            }) |>
-            bind_rows()
-          
-        } else{
-          
-          # if there is no data to save
-          tibble(
-            species = sp, 
-            study_id = s_id,
-            individual_local_identifier = ind_local,
-            individual_id = ind_id,
-            error_download_study = "no data with deployment id available", 
-            account = account, 
-            downloaded_at = Sys.time()
-          )
-          
-        }
-        
-        
-      } else { # if there is no data to save / error occurred!
-        
-
-# 5.2 - ELSE: download error ----------------------------------------------------
-
-        cat("-----------------an error occurred!-----------------\n")
-        
-        # if there is error with download, save the info
-        tibble(
-          species = sp, 
-          study_id = s_id,
-          individual_local_identifier = ind_local,
-          individual_id = ind_id,
-          error_download_study = paste(
-            down[["error"]][["message"]], collapse = " "
-          ), 
-          account = account, 
-          downloaded_at = Sys.time()
-        )
-        
-      }
       
     } else { # if individual and study are already downloaded 
       
-      
-# 5.1 - ELSE: data already downloaded -------------------------------------------
+      # ELSE: data already downloaded
 
-      cat("-----------------already downloaded!-----------------\n")
-      
-      downloaded <- downloaded |> 
-        mutate(t_down = file.mtime(here(sp_dir, "1_deployments", file)))
+      cat("\n-----------------already downloaded!-----------------")
       
       # keep the info from the downloaded file for the report
       tibble(
@@ -610,27 +660,73 @@ download_report <- deployments_filtered |>
         file = downloaded$file,
         study_id = s_id,
         individual_local_identifier = ind_local,
-        individual_id = ind_id,
+        individual_id = downloaded$individual_id,
         deployment_id = downloaded$deployment_id,
         account = account, 
-        downloaded_at = downloaded$t_down, 
-        already_downloadded = T
+        downloaded_on = downloaded$t_down, 
+        already_downloaded = T
       )
       
     }
     
-
   },
   .progess = T
   ) |> 
-  bind_rows()
+  bind_rows() 
 
+
+# 6 - Retry download for studies with error ------------------------------------
+
+# assuming that the error is caused by the way the individual local identifier
+# was specified we retry downloading only using the study_id
+
+download_report2 <- download_report |> 
+  group_split(study_id, error_download_study) |>
+  map(~{
+    
+    report <- .x
+    error_msg <- unique(report$error_download_study)
+    s_id <- unique(report$study_id)
+    account <- unique(report$account)
+    
+    # folder where the data will be saved
+    sp <- unique(report$species)
+    sp_dir <- here("Data", "Studies",  str_replace(sp, " ", "_"))
+    
+    if(!is.na(error_msg)){
+      
+      cat("\n\n", sp, which(s_id == studies), "|", ls)
+      cat("\n----------retrying download for the study!----------")
+      
+      study_download_protocol(
+        account = account, 
+        s_id = s_id, 
+        ind_local = NULL,
+        deployment_info = report, 
+        data_dir = here(sp_dir, "1_deployments")
+        ) |> 
+        # removing individual local identifier, because it will return NA, 
+        # and then adding the real one, that we didn't use in this case, 
+        # but it's useful to keep track of it
+        left_join(report |> select(ends_with("_id"), ends_with("_identifier")))
+      
+    } else {
+    
+      report
+        
+    }
+
+  }) |> 
+  bind_rows()
 
 
 
 # save the download report
 download_report |> 
   write_csv(here("Data", "Studies", "1_individuals_download_report.csv"))
+
+download_report |> 
+  write_rds(here("Data", "Studies", "1_individuals_download_report.rds"))
 
 
 # There were 50 or more warnings (use warnings() to see the first 50)
@@ -641,7 +737,3 @@ download_report |>
 # ℹ The requested url can then be retrieved with: `rlang::last_warnings()[[1]]$url`
 # ℹ Alternatively in some cases you might be able to retrieve the problems calling `vroom::problems()` on the result of the function call
 # that produced the warning.
-
-# no download problems
-# check <- download_report |>
-#   filter(!is.na(error_download_study)) 
