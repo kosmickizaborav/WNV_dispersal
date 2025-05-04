@@ -47,7 +47,7 @@ find_duplicated_tracks <- function(
       id1_end = df$track_end[match(id1, df$track_id)], 
       n_na1 = df$n_na[match(id1, df$track_id)], 
       id2_start = df$track_start[match(id2, df$track_id)], 
-      id2_end =  df$track_end[match(id2, df$track_id)], 
+      id2_end = df$track_end[match(id2, df$track_id)], 
       n_na2 = df$n_na[match(id2, df$track_id)]
     ) |> 
     # checking if the selected two (id1 and id2) tracks overlap in time

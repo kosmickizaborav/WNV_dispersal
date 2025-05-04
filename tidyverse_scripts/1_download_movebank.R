@@ -118,7 +118,7 @@ col_deploy <- c(
   "individual_number_of_deployments",
   "deployment_local_identifier", "tag_id", "tag_local_identifier",
   "sex", "animal_life_stage",  "manipulation_type",
-  "manipulation_comments",
+  "manipulation_comments",  "deployment_comments",
   "deploy_on_timestamp", "deploy_off_timestamp"
   )
 

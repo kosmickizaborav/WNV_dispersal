@@ -39,31 +39,33 @@ library(ggpubr)
 library(suncalc)
 library(rnaturalearth)
 
-tracks_list <- here("Data", "Studies", "3_deployment_duplicates_excluded.rds") |> 
-  read_rds() |> 
-  filter(excluded == "no") |> 
-  select(file, species)
+data_dir <- here("Data")
 
-# getting species of interest
-target_sp <- tracks_list |>
-  distinct(species) |>
-  pull() 
-  # str_replace(" ", "_")
+deployments_cleaned <- file.path(data_dir, "2_deployment_info_cleaned.rds") |> 
+  read_rds() |> 
+  filter(saved == T, excluded == F)
+
+target_sp <- deployments_cleaned |>
+  distinct(species) 
 
 # 1 - Create output directories -------------------------------------------
 
+graphs_dir <- file.path(data_dir, "Graphs")
+if(!dir.exists(graphs_dir)){ dir.create(graphs_dir) }
+if(!dir.exists(file.path(graphs_dir, "4_filtered_speed"))){ 
+  dir.create(file.path(graphs_dir, "4_filtered_speed"))
+}
+
 # folder for filtered speed and graphs
 target_sp |> 
-  map(~{
+  walk(~{
     
-    
+    print(.x)
     sp_dir <- here("Data", "Studies", str_replace(.x, " ", "_"))
-    graphs_dir <- here(sp_dir, "Graphs")
     speed_dir <- here(sp_dir, "4_filtered_speed")
-    
-    if(!dir.exists(graphs_dir)){ dir.create(graphs_dir) }
+    print(speed)
 
-    if(!dir.exists(speed_dir)){ dir.create(speed_dir) }
+    #if(!dir.exists(speed_dir)){ dir.create(speed_dir) }
     
   })
 
@@ -71,11 +73,51 @@ target_sp |>
 # 2 -  Flight speed limits from literature --------------------------------
 
 # data is loaded from literature: 
-# for "Alerstam_2007_supplement_table_extracted.xlsx" I direclty copied the
+# for "Alerstam_2007_supplement_table_extracted.xlsx" I directly copied the
 # table provided in the supplementary (converting the pdf to excel using adobe), 
 # for the bruderer I copied manually the values for the target species
 # the highest value was selected as a limit and rounded up, so that 
 # we just have approximate limit, as decimals are too precise
+
+
+# # FUNCTION: get_speed_limit ---------------------------------------------
+
+# # Enhanced function with user-defined summary function
+get_speed_value <- function(
+    sp, speed_limits, speed_col = "max_speed", species_col = "species",
+    summary_func = max
+  ) {
+  
+  df <- speed_limits |> 
+    rename(species = {{species_col}}, speed = {{speed_col}}) |> 
+    mutate(genus = str_split_i(species, " ", 1))
+  
+  if (sp %in% df$species) {
+    
+    spout <- df |> 
+      filter(species == sp) |> 
+      summarise(max_speed = summary_func(speed, na.rm = TRUE)) |> 
+      pull(max_speed)
+    
+    return(speed)
+  }
+  
+  gen <- str_split_i(sp, " ", 1)
+  
+  if(gen %in% unique(df$genus)) {
+    
+    spout <- df |> 
+      filter(species == sp) |> 
+      summarise(max_speed = summary_func(speed, na.rm = TRUE)) |> 
+      pull(max_speed)
+    
+    if (nrow(genus_matches) > 0) {
+      return(summary_func(genus_matches$max_speed, na.rm = TRUE))
+    } else {
+      return(NA)
+    }
+  }
+}
 
 bird_speeds <- here("Alerstam_2007_supplement_table_extracted.xlsx")|> 
   read_xlsx(skip = 1) |> 
@@ -83,10 +125,21 @@ bird_speeds <- here("Alerstam_2007_supplement_table_extracted.xlsx")|>
   rename_with(~c("species", "speed", "sd"), everything()) |> 
   mutate(
     max_speed = if_else(is.na(sd), speed, speed + 2*sd), 
-    species = str_squish(str_remove(species, "•"))
+    species = str_squish(str_remove(species, "•")), 
+    genus = str_split_i(species, " ", 1),
   ) |> 
+  filter()
+
+bird_speeds <- bird_speeds |> 
   summarise(max_speed = max(max_speed), .by = species) |> 
-  filter(species %in% target_sp)  |> 
+  filter(species %in% target_sp) |> 
+  bind_rows(
+    bird_speeds |> 
+      mutate(genus = str_split_i(species, " ", 1)) |> 
+      filter()
+      summarise(max_speed = max(max_speed), .by = genus)
+  )
+  
   full_join(
     here("Bruderer_2001_extracted_from_paper.xlsx") |> 
       read_xlsx() |> 

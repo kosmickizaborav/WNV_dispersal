@@ -58,11 +58,14 @@
 # COMMENTED OUT SO THAT IT CAN BE RUN AS A SOURCE
 library(here)
 library(tidyverse)
+library(amt)
+library(sf)
+library(arrow)
 source(here("0_helper_functions.R"))
 
 # columns needed to detect track problems
 cols_gps <- c(
-  "timestamp", "geometry", "gps_hdop", "gps_vdop",
+  "timestamp", "geometry", "gps_hdop", "gps_vdop", "gps_satellite_count", 
   "algorithm_marked_outlier", "import_marked_outlier",
   "manually_marked_outlier", "sensor_type_id"
 )
@@ -70,6 +73,7 @@ cols_gps <- c(
 # this is the study id from aiguamolls de l'emporda
 E4WarningID <- 4043292285
 data_dir <- here("Data")
+study_dir <- file.path(data_dir, "Studies")
 
 target_sensors <- c(653, 2299894820)
 
@@ -80,8 +84,6 @@ f_track_problem <- "2_track_problems_report.rds"
 f_deploy_info_complete <- "2_deployment_info_complete.rds"
 
 
-library(move2)
-library(sf)
 source(here("2_detect_track_problems.R"))
 source(here("2_find_duplicated_tracks.R"))
 
@@ -117,22 +119,11 @@ deployments_filtered <- file.path(data_dir, f_deployments_filtered) |>
   ) |>
   filter(manipulation_type != "other")
 
-
-if(!exists("deployments_filtered")){
-  
-  warning("Deployments file loaded directly, without previous checking!")
-  
-  deployments_filtered <- file.path(data_dir, f_deployments_filtered) |> 
-    read_rds()
-  
-}
-
 deployments_filtered <- deployments_filtered |>
   mutate(
     file = make_file_name(study_id, individual_id, deployment_id),
-    fin_exists = file.exists(
-      get_file_path(file, folder = "1_deployments", species)
-    )
+    file_parquet = str_replace(file, ".rds", ".parquet"),
+    fin_exists = check_file_exists(file, "1_deployments", species)
   ) |> 
   filter(fin_exists == T) |> 
   select(-fin_exists) |> 
@@ -142,12 +133,14 @@ deployments_filtered <- deployments_filtered |>
 # just for reporting on the progress
 dc <- nrow(deployments_filtered)
 
+target_sp <- deployments_filtered  |> 
+  distinct(species) |> 
+  pull() 
+
 # 2 - Create output directories-------------------------------------------------
 
 # create directory for the cleaned deployments and track problems
-deployments_filtered  |> 
-  distinct(species) |> 
-  pull() |> 
+target_sp |> 
   walk(~{
     
     sp_dir <- file.path(data_dir, "Studies", str_replace(.x, " ", "_"))
@@ -159,17 +152,18 @@ deployments_filtered  |>
     
   })
 
+
 # 3 - Label track problems------------------------------------------------------
 
-deployments_filtered |>
-  select(file_n, file, species, deploy_on_timestamp, deploy_off_timestamp) |> 
+deploy_info <- deployments_filtered |>
+  select(contains("timestamp"), file, species, file_n) |> 
   mutate(
-    fin_path = get_file_path(file, folder = "1_deployments", species),
-    fout_path = get_file_path(file, folder = "2_track_problems", species), 
+    fin_path = get_file_path(file, "1_deployments", species),
+    fout_path = get_file_path(file, "2_track_problems", species), 
     fout_exists = file.exists(fout_path)
   ) |> 
   filter(fout_exists == F) |> 
-  select(-fout_exists) |> 
+  select(-fout_exists, -file) |> 
   group_split(fin_path) |> 
   walk(~{
     
@@ -182,20 +176,32 @@ deployments_filtered |>
     
     fin |> 
       read_rds() |> 
-      select(any_of(cols_gps), ends_with("_id")) |> 
-      detect_track_problems( 
-        deploy_on_time = deploy_info$deploy_on_timestamp, 
-        deploy_off_time = deploy_info$deploy_off_timestamp, 
+      mutate(
+        x = st_coordinates(geometry)[,1],
+        y = st_coordinates(geometry)[,2]
+      ) |>
+      st_drop_geometry() |>
+      as_tibble() |> 
+      make_track(
+        x, y, timestamp,
+        # movebank default, but checked that all tracks have this crs
+        crs = st_crs(4326), 
+        all_cols = T
+      ) |> 
+      detect_track_problems(
+        deploy_on_time = deploy_info$deploy_on_timestamp,
+        deploy_off_time = deploy_info$deploy_off_timestamp,
         sensors_of_interest = target_sensors
       ) |> 
-      select(geometry, timestamp, sensor_type_id, track_problem) |> 
+      select(x_, y_, t_, sensor_type_id, track_problem) |> 
       write_rds(fout)
-    
-    invisible(gc())
+
+      invisible(gc())
     
   }) 
 
 invisible(gc())
+
 
 # 4 - Summarize track problems ------------------------------------------------
 
@@ -203,7 +209,7 @@ fp_track_problem <- file.path(data_dir, f_track_problem)
 
 if(!file.exists(fp_track_problem)){
   
-  track_problem_report <- deployments_filtered |> 
+  files <- deployments_filtered |> 
     mutate(
       fin_path = get_file_path(file, folder = "2_track_problems", species)
     ) |> 
@@ -220,7 +226,6 @@ if(!file.exists(fp_track_problem)){
       
       fin |> 
         read_rds() |> 
-        as_tibble() |> 
         summarize(
           track_start = min(timestamp), 
           track_end = max(timestamp),
@@ -245,7 +250,6 @@ if(!file.exists(fp_track_problem)){
   track_problem_report |> 
     filter(!is.na(track_problem)) |>
     summarize(count = sum(n_locs, na.rm = T), .by = c(track_problem)) |> 
-    mutate(track_problem = str_replace(track_problem, ">", "greater than")) |>
     arrange(desc(count)) |> 
     write_csv(file.path(data_dir, "2_track_problems_total_summary.csv"))
     
@@ -286,7 +290,6 @@ if(!file.exists(fp_deploy_info_complete)){
       
       fin |> 
         read_rds() |> 
-        as_tibble() |> 
         # remove columns that are not needed
         select(-any_of(c("event_id", "event_group_id", "track_segment_id"))) |>
         select(ends_with("_id"), ends_with("_identifier")) |> 
@@ -368,59 +371,7 @@ rm(track_problem_report)
 
 dc <- nrow(deploy_info_cleaned)
 
-# 4 - Save cleaned deployments--------------------------------------------------
-
-deploy_info_cleaned |>
-  rename(file_out = file) |>
-  mutate(
-    fout_path = get_file_path(file_out, folder = "2_cleaned", species),
-    fout_exists = file.exists(fout_path),
-    file_in = make_file_name(study_id, individual_id, deployment_id),
-    fin_path = get_file_path(file_in, folder = "2_track_problems", species)
-  ) |> 
-  filter(saved == T, fout_exists == F) |> 
-  select(file_n, species, fin_path, fout_path, saved, sensor_type_id) |>
-  group_split(fin_path) |>
-  walk(~{
-    
-    deploy_info <- .x
-    fin <- unique(deploy_info$fin_path)
-    
-    cat("\n", deploy_info$species, deploy_info$file_n, "|", dc)
-    cat("\n---------------------cleaned track saved!-----------------------")
-    
-    fin |> 
-      read_rds() |> 
-      # filter only locations without track problems
-      filter(is.na(track_problem)) |> 
-      # if there are multiple sensor types, split the data
-      group_split(sensor_type_id) |>
-      walk(~{
-        
-        track <- .x
-        
-        sensor <- unique(track$sensor_type_id)
-        fout <- deploy_info$fout_path[deploy_info$sensor_type_id == sensor]
-        to_save <- deploy_info$saved[deploy_info$sensor_type_id == sensor]
-        
-        if(to_save){
-          
-          track |> 
-            select(-track_problem, -sensor_type_id) |> 
-            write_rds(fout)
-          
-        }
-        
-      })
-        
-    
-    invisible(gc())
-
-  })
-  
-
-# 8 - Check if deployments are duplicated ---------------------------------
-
+# 7 - Check if deployments are duplicated ---------------------------------
 
 saved_tracks <- deploy_info_cleaned |> 
   # there are inconsistencies with data, e.g. individual number of deployments
@@ -470,6 +421,8 @@ dup_tag_to_exclude <- saved_tracks |>
   }) |> 
   unlist()
 
+rm(saved_tracks)
+
 
 deploy_info_cleaned <- deploy_info_cleaned |> 
   mutate(
@@ -480,6 +433,58 @@ deploy_info_cleaned <- deploy_info_cleaned |>
 
 deploy_info_cleaned |> 
   write_rds(file.path(data_dir, "2_deployment_info_cleaned.rds"))
+
+
+# 8 - Save cleaned deployments--------------------------------------------------
+
+deploy_info_cleaned |>
+  rename(file_out = file) |>
+  mutate(
+    fout_path = get_file_path(file_out, folder = "2_cleaned", species),
+    fout_exists = file.exists(fout_path),
+    file_in = make_file_name(study_id, individual_id, deployment_id),
+    fin_path = get_file_path(file_in, folder = "2_track_problems", species)
+  ) |> 
+  filter(saved == T, fout_exists == F, excluded == F) |> 
+  select(file_n, species, fin_path, fout_path, saved, sensor_type_id) |>
+  group_split(fin_path) |>
+  walk(~{
+    
+    deploy_info <- .x
+    fin <- unique(deploy_info$fin_path)
+    
+    cat("\n", deploy_info$species, deploy_info$file_n, "|", dc)
+    cat("\n---------------------cleaned track saved!-----------------------")
+    
+    fin |> 
+      read_rds() |> 
+      # filter only locations without track problems
+      filter(is.na(track_problem)) |> 
+      # if there are multiple sensor types, split the data
+      group_split(sensor_type_id) |>
+      walk(~{
+        
+        track <- .x
+        
+        sensor <- unique(track$sensor_type_id)
+        fout <- deploy_info$fout_path[deploy_info$sensor_type_id == sensor]
+        to_save <- deploy_info$saved[deploy_info$sensor_type_id == sensor]
+        
+        if(to_save){
+          
+          track |> 
+            select(-track_problem, -sensor_type_id) |> 
+            write_rds(fout)
+          
+        }
+        
+      })
+    
+    
+    invisible(gc())
+    
+  })
+
 
 
 # summary for the report
