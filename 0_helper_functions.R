@@ -1,4 +1,6 @@
-
+# get day bursts
+#  , day_burst := cumsum(c(1, diff(as.numeric(get(day_cycle_col))) > 1))
+# , by = file]
 
 # squish_base -------------------------------------------------------------
 

@@ -113,6 +113,7 @@ plot_steps_count <- function(
     xlab = "day of the year", 
     ylab = "steps per day",
     leglab = NULL,
+    linelab = NULL,
     pal = NULL, 
     month_limits = NULL,
     month_labels = T, 
@@ -130,6 +131,7 @@ plot_steps_count <- function(
   linetype_check <- as.character(ensym(linetype)) %in% line_types
   
   if(is.null(ylab)){ ylab <- ensym(counts) }
+  if(is.null(linelab)){ linelab <- ensym(linetype)}
   if(is.null(leglab)){
     leglab <- ifelse(color_check == F, ensym(color), ensym(counts))
   }
@@ -145,7 +147,7 @@ plot_steps_count <- function(
     ) +
     scale_y_continuous(limits = c(0, NA), expand = y_expand) +
     theme_bw() +
-    labs(x = xlab, y = ylab, title = title, color = leglab) +
+    labs(x = xlab, y = ylab, title = title, color = leglab, line = linelab) +
     theme(legend.position = legend_position) 
   
   if(month_labels == T){
@@ -157,7 +159,7 @@ plot_steps_count <- function(
     p <- p +
       geom_text(
         data = month_limits, 
-        aes(x = mid_yd, y = y_max, label = month_lab),
+        aes(x = mid_yd, y = y_max, label = month),
         hjust = 0.5, vjust = -1
       ) 
   }

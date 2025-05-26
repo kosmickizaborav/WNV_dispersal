@@ -26,10 +26,6 @@ library(suncalc)
 source("0_helper_functions.R")
 
 
-sun_times <- c("dawn", "dusk", "nauticalDawn", 
-               "nauticalDusk", "nightEnd", "night")
-
-
 data_dir <- here::here("Data")
 graphs_dir <- file.path(data_dir, "Graphs")
 
@@ -124,14 +120,16 @@ resampled_tracks <- rbindlist(lapply(seq_along(tracks), function(i){
     track_resample(
       rate = resample_rate,
       tolerance = resample_tolerance
-    ) 
+    ) |> 
+    select(-burst_)
   
   message(sprintf("Processing track %d | %d!", i, n_tracks))
  
   n_resampled <- nrow(track)
   
   df_out <- data.table(
-    file = fout,
+    fin = fin, 
+    fout = fout,
     n_org_track = n_org,
     n_resampled = n_resampled,
     saved = n_resampled >= 3
@@ -143,9 +141,16 @@ resampled_tracks <- rbindlist(lapply(seq_along(tracks), function(i){
   
 }))
 
-resampled_tracks[, `:=`(
-  resample_rate = resample_rate,
-  resample_tolerance = resample_tolerance
+
+resampled_tracks <- merge(
+  resampled_tracks, filtered_tracks[, .(birdlife_name, file)], 
+  by.x = "fin", by.y = "file")[
+  , fin := NULL][
+  , `:=`(
+    resample_rate_min = as.numeric(resample_rate, units = "mins"),
+    resample_tolerance_min = as.numeric(resample_tolerance, units = "mins")
   )]
+names(resampled_tracks)[1] <- "file"
+
 
 fwrite(resampled_tracks, file.path(data_dir, file_resampled_report))
