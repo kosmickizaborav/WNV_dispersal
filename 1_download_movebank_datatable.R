@@ -79,7 +79,7 @@ data_dir <- here::here("Data")
 if (!dir.exists(data_dir)) dir.create(data_dir)
 
 # Extended species list
-WNV_prevalence <- here::here("Alex_data", "Palearctic_prevalence bird_species.xlsx") |> 
+WNV_prevalence <- here::here("Alex_data", "Palearctic_prevalence bird_species.xlsx") |>
   readxl::read_xlsx() |> 
   as.data.table()
 

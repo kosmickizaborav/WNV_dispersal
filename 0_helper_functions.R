@@ -233,6 +233,15 @@ rename_to_birdlife <- function(
 }
 
 
+
+# FUNCTION: day_cycle_to_yd -----------------------------------------------
+
+day_cycle_to_yd <- function(day_cycle){
+  
+  as.POSIXlt(as.Date(day_cycle))$yday + 1
+  
+}
+
 # rename_to_birdlife <- function(df, species_name, add_phylo = F) {
 #   library(tidyverse)
 #   

@@ -76,7 +76,7 @@ get_speed_limit <- function(
 plot_speed_turns <- function(
     df, speed_limit,
     speed_col = "speed", turn_col = "turn", 
-    cols = c("#A7DBD8FF", "#F38630FF"), 
+    cols = c("#088F8F", "#6e1354"), 
     q_seq = seq(0.5, 1, 0.01), 
     min_step = 0.001
 ) {

@@ -133,6 +133,7 @@ if(!file.exists(file.path(data_dir, file_speed_quantiles))){
 
 # 2 - Plot speed quantiles ----------------------------------------------------
 
+pal <- c("#088F8F", "#6e1354")
 
 if(!file.exists(file.path(graphs_dir, graph_speed_quantiles))){
   
@@ -148,9 +149,12 @@ if(!file.exists(file.path(graphs_dir, graph_speed_quantiles))){
   
   p <- ggplot(df_plot) +
     geom_tile(
-      aes(x = quantile, y = birdlife_name, fill = limit_check), color = "gray33"
+      aes(x = quantile, y = birdlife_name, fill = limit_check),
+      color = "gray33", alpha = 0.8
     ) + 
     theme_minimal() + 
+    scale_fill_manual(values = pal) +
+    scale_y_discrete(limits = rev(unique(df_plot$birdlife_name))) +
     theme(
       legend.position = "top", 
       plot.title = element_text(hjust = 0.5), 

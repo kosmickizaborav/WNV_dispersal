@@ -255,6 +255,12 @@ deploy_info <- fread(file.path(data_dir, "2_deployments_cleaned.csv"))[
 step_files <- c(night_files, day_files)
 n_files <- length(step_files)
 
+# setting colors and breaks
+cat_breaks <- c(0, 2, 5, 10, 25, 50, Inf)
+cat_names <- c('1', "2-4", '5-9', '10-24', '25-49', '50+')
+palb <- paletteer::paletteer_d("LaCroixColoR::PeachPear") 
+names(palb) <- cat_names
+
 night_steps_all <- rbindlist(lapply(seq_along(step_files), function(i){
   
   fin <- step_files[i]
@@ -262,59 +268,65 @@ night_steps_all <- rbindlist(lapply(seq_along(step_files), function(i){
   sp <- gsub("_", " ", gsub(".*/Studies/([^/]+)/5_distances/.*", "\\1", fin))
   dl <- gsub("_", "-", gsub(".*_steps_([^/]+)_continent.*", "\\1", fin))
   st <- gsub("_", " ", gsub(".*all_tracks_dcp_([^/]+)_steps.*", "\\1", fin))
-
-    # total counts
+  
+  # read and join
   steps <- fread(fin)[, .(day_cycle = day_cycle_1, continent, file)]
+  step_data <- deploy_info[steps, on = "file"][
+    , yd := as.POSIXlt(as.Date(day_cycle))$yday + 1
+  ]
+  rm(steps)
   
-  step_count <- deploy_info[steps, on = "file"][
-    , `:=` (
-      yd = as.POSIXlt(as.Date(day_cycle))$yday + 1, 
-      day_limit = dl)][
-      , .(
-        #n_deploys = uniqueN(file), 
-        #n_steps = .N, 
-        n_ind = uniqueN(individual_local_identifier))
-      , by = yd][
-      , ':=' (
-        day_limit = dl, 
-        species = sp, 
-        step_type = st
-      )]
+  # Count for Europe
+  europe <- step_data[
+    continent == "Europe",
+    .(n_ind = uniqueN(individual_local_identifier)), by = yd]
+  europe[, region := "Europe"]
   
-  cat(sprintf("\n %s - %d|%d", sp, i, n_files))
+  # Count for World (all continents together)
+  world <- step_data[
+    , .(n_ind = uniqueN(individual_local_identifier)), by = yd]
+  world[, region := "World"]
   
-  return(step_count)
+  # Combine
+  out <- rbind(europe, world)
+  out[, `:=`(
+    day_limit = dl,
+    species = sp,
+    step_type = st
+  )]
   
+  cat(sprintf("\n %s - %d|%d", sp, i, length(step_files)))
+  return(out)
 }))
 
-# setting colors and breaks
-cat_breaks <- c(0, 2, 5, 10, 25, 50, Inf)
-cat_names <- c('1', "2-4", '5-9', '10-24', '25-49', '50+')
-palb <- paletteer::paletteer_d("LaCroixColoR::PeachPear") 
-names(palb) <- cat_names
+
+setorder(night_steps_all, species, day_limit, yd)
 
 night_steps_all[
   , ':=' (
-    species = factor(species, levels = rev(sort(unique(species)))), 
+    species = factor(species, levels = unique(species)), 
     n_ind_cat = cut(n_ind, breaks = cat_breaks, labels = cat_names, 
                     include.lowest = TRUE)
   )]
 
 y_breaks <- levels(night_steps_all$species)
 
+step_dts <- split(night_steps_all, by = c("day_limit", "step_type", "region"), 
+                  keep.by = T)
+
 # PLOT nauticalDawn-nauticalDusk counts###
 
-lapply(steps_dts, function(dt){
+lapply(step_dts, function(dt){
   
   dl <- unique(dt$day_limit)
   st <- unique(dt$step_type)
+  reg <- unique(dt$region)
   
   pname <- sprintf(
-    "3_%s_%s_steps_availability.png", gsub("-", "_", dl), gsub(" ", "_", st))
-  tirla.pn
+    "3_%s_%s_steps_availability_%s.png", 
+    gsub("-", "_", dl), gsub(" ", "_", st), tolower(reg))
   
-  
-  plot_tile_timeline(
+  p <- plot_tile_timeline(
     dt, 
     y = species,
     fill = n_ind_cat, 
@@ -322,7 +334,7 @@ lapply(steps_dts, function(dt){
     flab = "count",
     pal_type = "manual"
     ) +
-    scale_y_discrete(breaks = rev(y_breaks)) +
+    scale_y_discrete(breaks = unique(night_steps_all$species), drop = F) +
     guides(fill = guide_legend(nrow = 1)) +
     theme(
       panel.spacing = unit(3, "mm"), 
@@ -330,12 +342,12 @@ lapply(steps_dts, function(dt){
       plot.subtitle = element_text(hjust = 0.5),
     ) +
     labs(
-      title = sprintf("Year round %s step availability", st), 
+      title = sprintf("Year round %s step availability - %s", st, reg), 
       subtitle = sprintf("day limits: %s", dl)
     )
   
   ggsave(
-    file.path(steps_plot_dir, pname), width = 18, height = 18, units = "cm")
+    file.path(steps_plot_dir, pname), p, width = 18, height = 22, units = "cm")
 })
 
 
