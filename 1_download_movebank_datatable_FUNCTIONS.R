@@ -1,3 +1,64 @@
+#' ---
+#' title: "Function used in the script download_movebank_datatable.R"
+#' output: github_document
+#' ---
+
+# INFO --------------------------------------------------------------------
+
+#' **FUNCTION 1: download_study_metadata**
+#' wrapping the function movebank_download_study_info(). 
+#' 1 - download data from all accounts that are provided to the function 
+#' 2 - filter studies so that they include only the studies with download access, 
+#'     that have registered deployments, that deploy sensors of interest, that 
+#'     are not specified as a test deployment
+#' 3 - merge results, remove duplicated study IDs - keep only one account per
+#'     study
+#' 4 - save the result if indicated
+#' >>> INPUT:
+#' 1 - movebank_accounts - character vector with Movebank account names
+#' 2 - tag_ids - character vector with sensor type names,
+#' 3 - save_file - logical, if TRUE, saves the result to a file
+#' 4 - file_name - character, name of the file to save the result
+#' 5 - file_dir - character, directory to save the file
+#' >>> OUTPUT: data.table with study metadata with the reference account
+#' 
+#' **FUNCTION 2: download_deployment_metadata**
+#' wrapping the function Movebank_download_deployment(), if error occurs log
+#' the error message. 
+#' 1 - download deployments from all the studies provided in the input 
+#'     data.table, log error message if error occurred
+#' 2 - filter deployments so that they include only the deployments with the 
+#'     sensors and manipulation type of interest
+#' 3 - save the result if indicated
+#' >>> INPUT: 
+#' 1 - id_account_dt - data.table with study id and Movebank account names
+#' 2 - save_file - logical, if TRUE, saves the result to a file
+#' 3 - tag_ids - character vector with sensor type names,
+#' 4 - accepted_manipulation - character vector with manipulation types to filter
+#' 5 - file_name - character, name of the file to save the result
+#' 6 - file_dir - character, directory to save the file
+#' #' >>> OUTPUT: data.table with deployment metadata
+#' 
+#' **FUNCTION 3: download_individual_deployments**
+#' function that wraps all the steps needed when downloading deployments.
+#' wraps movebank_download_study(), and downloads the data using study_id, 
+#' individual_id, and deployment_id from the deployment metadata.
+#' saves the track in the original movebank format and returns the deployment 
+#' information and the data status:
+#' - if an error occurred, returns the error message
+#' - if no error occurred but no data available to save, annotate it
+#' - if data available, save it and return file name
+#' >>> INPUT:
+#' 1 - deploy_info - data.table with deployment metadata, must contain account, 
+#'     study_id, individual_id, deployment_id, and species_col (species name)
+#' 2 - species_col - character, column name with species names in deploy_info
+#' 3 - tag_ids - character vector with sensor type names,
+#' 4 - studies_dir - character, directory to save the studies
+#' 5 - sub_dir - character, sub-directory to save the studies, if NA, saves in the
+#'     studies_dir
+#' >>> OUTPUT: 
+#' 1 - deployments saved in the respective species folders
+#' 2 - data.table with deployment download status
 
 # FUNCTION: download_study_metadata ---------------------------------------
 
@@ -136,7 +197,9 @@ download_deployment_metadata <- function(
     options("move2_movebank_key_name" = account)
     
     # Display progress message
-    message(sprintf("Downloading deployment metadata for study %d | %d!", index, id_total))
+    message(
+      sprintf(
+        "Downloading deployment metadata for study %d | %d!", index, id_total))
     
     # Attempt to download the deployment data with error handling
     tryCatch(
@@ -207,7 +270,7 @@ download_individual_deployments <- function(
     tag_ids = c("gps", "sigfox-geolocation"),
     studies_dir = here::here("Data", "Studies"), 
     species_col = "birdlife_name", 
-    sub_dir = NA # "1_deployments"
+    sub_dir = NA 
 ) {
   
   col_check <- c("account", "study_id", "individual_id", "deployment_id")
@@ -286,7 +349,8 @@ download_individual_deployments <- function(
         } else{
           
           rm(track)
-          return(data.table(row_id = index, error = "no data for the deployment"))
+          return(
+            data.table(row_id = index, error = "no data for the deployment"))
         }
         
       }, error = function(e) {

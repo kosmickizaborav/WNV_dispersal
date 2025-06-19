@@ -1,72 +1,66 @@
 #' ---
-#' title: "Optimized Downloading Movebank Data"
+#' title: "Download movebank datatable"
 #' output: github_document
 #' ---
 
 # INFO --------------------------------------------------------------------
 #' **SECTION 0 - Define parameters and packages**
-#' in this section we define variables that are used later in the script:
-#' - target_sp - species of interest that we search for in Movebank
-#' - tags_ids - sensor type ids that we are interested in, as defined in Movebank
-#' - accepted_manipulation - manipulation types that are accepted,
-#' - col_deploy - relevant columns from the deployment data
+#' the species of interest are all the species that in the global database 
+#' of WNV prevalence have a group prevalence > 0. furthermore in this section
+#' we define the file names of the outputs. 
 #'  
-#' **SECTION 1 - Check available studies** 
+#' **SECTION 1 - Download study metadata** 
 #' access all studies from different accounts and filter studies that:
-#' filter the sensors of interest 
 #' 1 - with download access
 #' 2 - have registered deployments
 #' 3 - deploy sensors of interest
 #' 4 - it is not specified as a test deployment
-#' >>> OUTPUT: f_studies_filtered
+#' >>> OUTPUT: file_stu
 #' 
-#' **SECTION 2 - Download deployment information**
-#' download deployment information from studies of interest,
-#' done in this way, even if it is much slower then just filtering studies,
-#' because in study info sometimes there is no species specified, 
-#' so to make sure to include all potential studies
-#' if download failed keep the error information
-#' >>> OUTPUT: f_deployments
+#' **SECTION 2 - Download deployment metadata**
+#' download deployment information from studies of interest, which include 
+#' studies that explicitly mention the species of interest as well as studies
+#' that have incomplete information about the species. done in this way, 
+#' even if it is much slower then just filtering studies, because sometimes
+#' the species is specified within deployment and not in the study metadata.
+#' if download failed keep the error information. Keep only the deployments that
+#' have the appropriate sensor and manipulation type. 
+#' >>> OUTPUT: file_dep_all
 # 
-#'**SECTION 3 - Filter deployment information**
+#'**SECTION 3 - Filter deployments**
 #' create a new variable species that extracts species information from 
 #' the column taxon_detail if it's not specified under taxon_canonical_name.
 #' This step was done after seeing how taxon is specified in the selected study, 
-#' it can happen that not all cases are included when adding new studies.
+#' so it might not include all the options when adding new studies. 
 #' filter deployments that include:
-#' 1 - species of interest
+#' 1 - species of interest specified under target_sp
 #' 2 - sensor type of interest
 #' 3 - no manipulation with the tracked animal or animal relocated
-#' >>> OUTPUT: f_deployments_filtered
+#' after inspecting the manipulation comments, we excluded some of the studies 
+#' that seem to have correct manipulation_type incorrectly specified. we 
+#' changed it according to the manipulation_comments - detected problematic 
+#' manipulation comments:
+#'   - 1. relocated and released for trials; for 2 trials was treated 
+#'    to shift light cycle
+#'   - 2. relocated and released for trials; for 1 trial was treated to shift 
+#'   ight cycle
+#'   - 3. CS (clock-shift)
+#'   - 4. FL
+#'   - 5. XY (magnetically deprived)
+#'   - 6. AO (anosmic)
+#'   - 7. A: anosmia treatment prior to relocation and release
+#'   - 8. CAP: relocated with purified air during transportation
+#'   - 9. animal owned by farm and may have been restricted in movement or
+#'     transported for sale (see Deployment Comments) - couldn't find the column
+#'     deployment comments in the deployment information so we excluded it
+#'     in case the animal was restricted
+#' >>> OUTPUT: file_dep_filter
 #' 
-#' **SECTION 4 - Create directories for species with data**
-#' create a study folder for every species
-#' 
-#' **FUNCTION 1: safe_study_download**
-#' safely wrapping the function movebank_download_study that was used to 
-#' download data, had to specify two version because the function wouldn't
-#' accept individual_local_identifier as NULL or NA
-#' 
-#' **FUNCTION 2: study_download_protocol**
-#' function that wraps all the steps needed when downloading data, 
-#' and returns the deployment information and the data status: 
-#' - if an error occurred, returns the error message
-#' - if no error occurred but no data available to save, annotate it
-#' - if data available, save it and return file name
-#' 
-#' **SECTION 5 - Download and save deployments**
-#' - download tracking data using study_id, individual_local_identifier, 
-#'    and sensor_type_id
-#' - save each individual deployment in files specified by study_id, 
-#'    individual_id and deployment_id
-#' - keep track of errors that occurred during download and 
-#'    save it in download_report
-#' 
-#'  **SECTION 6 - Retry download for studies with errors**
-#'  - retry downloading data for studies that had an error during download
-#'    this time using only study_id, for some reason it fixed a few studies
-#'    like that, assuming it's the way the individual was specified. 
-#' >>> OUTPUT: f_download_report
+#' **SECTION 4 - Download individual deployments**
+#' Using account, study_id, individual_id, deployment_id, download individual
+#' deployments of interest, and save them in a separate folder per species. In
+#' case an error occurs while downloading, log the error message. 
+#' >>> OUTPUT: file_down_report
 
 # 0 - Define parameters and packages--------------------------------------------
 
@@ -75,11 +69,13 @@ library(move2)
 source("0_helper_functions.R")
 source("1_download_movebank_datatable_FUNCTIONS.R")
 
+# main ouput directory
 data_dir <- here::here("Data")
 if (!dir.exists(data_dir)) dir.create(data_dir)
 
-# Extended species list
-WNV_prevalence <- here::here("Alex_data", "Palearctic_prevalence bird_species.xlsx") |>
+# extended species list
+WNV_prevalence <- here::here(
+  "Alex_data", "Palearctic_prevalence bird_species.xlsx") |>
   readxl::read_xlsx() |> 
   as.data.table()
 
@@ -98,6 +94,7 @@ target_sp <- unique(
 
 rm(sp_to_check, WNV_prevalence, target_sp_birdlife)
 
+# OUTPUT FILES
 file_stu <- "1_downloadable_studies.csv"
 file_dep_all <- "1_downloadable_studies_deployments.csv"
 file_dep_filter <- "1_deployments_to_download.csv"
@@ -115,7 +112,7 @@ if (!file.exists(file.path(data_dir, file_stu))) {
     movebank_access,
     tag_ids = c("GPS", "Sigfox Geolocation"), 
     save_file = T, 
-    file_name = "1_downloadable_studies.csv", 
+    file_name = file_stu, 
     file_dir = data_dir
     )
 
@@ -137,13 +134,14 @@ if (!file.exists(file.path(data_dir, file_dep_all))) {
     )
   )
     
-  # Create a taxon filter for genus (any incomplete scientific names) and target species
+  # Create a taxon filter for genus (any incomplete scientific names) 
+  # and target species
   taxon_filter <- paste(
     c(grep(" ", taxon_ids, invert = TRUE, value = TRUE), target_sp), 
     collapse = "|"
     )
   
-  # Filter studies of interest
+  # keep only study ids where the previously defined taxon filter is detected
   id_to_download <- studies[
       grepl(taxon_filter, taxon_ids) |
         grepl(taxon_filter, name) |
@@ -151,6 +149,7 @@ if (!file.exists(file.path(data_dir, file_dep_all))) {
       .(id, account)
     ]
   
+  # download deployment metadata
   deployments <- download_deployment_metadata(
     id_to_download,
     save_file = T, 
@@ -160,7 +159,7 @@ if (!file.exists(file.path(data_dir, file_dep_all))) {
     file_dir = data_dir
     )
   
-  rm(studies)
+  rm(studies, taxon_ids, taxon_filter, id_to_download)
   
 }
 
@@ -171,7 +170,7 @@ if(!file.exists(file.path(data_dir, file_dep_filter))){
   # filter deployments that contain target species
   deployments <- fread(file.path(data_dir, file_dep_all))
   
-  # remove extra spaces in case they are in the strings
+  # remove extra spaces in case there are
   sp_cols <- c("taxon_canonical_name", "taxon_detail")
   deployments[, (sp_cols) := lapply(.SD, function(x) {
     squish_base(x)}), .SDcols = sp_cols]
@@ -183,7 +182,7 @@ if(!file.exists(file.path(data_dir, file_dep_filter))){
     grepl(" ", scientific_name), scientific_name, 
     # in case family is specified seems like species is in taxon detail
     grepl("idae$|Aves|Animalia", scientific_name), to_sentence_base(taxon_detail),
-    grepl(" ", taxon_detail) & (!grepl(" ", scientific_name) | is.na(scientific_name)), taxon_detail,
+    grepl(" ", taxon_detail) & (!grepl(" ", scientific_name) | is.na(scientific_name)),  to_sentence_base(taxon_detail),
     # when genus was specified epitaph of the species is in taxon detail
     !grepl(" ", taxon_detail), to_sentence_base(paste(scientific_name, taxon_detail)), 
     default = scientific_name
@@ -226,7 +225,7 @@ if(!file.exists(file.path(data_dir, file_dep_filter))){
   
   fwrite(deployments_filtered, file.path(data_dir, file_dep_filter))
   
-  rm(deployments)
+  rm(deployments, sp_cols, manipulation_problem, col_deploy)
   
 } 
 
@@ -235,19 +234,20 @@ rm(file_dep_all, file_stu, target_sp)
 
 # 4 - Download individual deployments -------------------------------------
 
-# Load the filtered deployments data if it already exists
+# load the filtered deployments data
 deployments_filtered <- fread(file.path(data_dir, file_dep_filter))[
   , .(account, study_id, individual_id, deployment_id, birdlife_name)
 ]
  
 rm(file_dep_filter)
 
-# create directories for each species
+# create directories for all species
 create_dir(
   species = deployments_filtered[, unique(birdlife_name)], 
   new_dir = "1_deployments"
 )
 
+# download individual deployments
 download_report <- download_individual_deployments(
     deployments_filtered, 
     tag_ids = c("gps", "sigfox-geolocation"),
@@ -256,6 +256,7 @@ download_report <- download_individual_deployments(
     sub_dir = "1_deployments"
 ) 
 
+# save download report
 fwrite(download_report, file.path(data_dir, file_down_report))
 
 

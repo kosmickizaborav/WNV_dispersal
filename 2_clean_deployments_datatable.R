@@ -11,45 +11,20 @@
 #' - cols_gps - columns that are used for cleaning process
 #' - create output directory for cleaned data
 #'  
-#' **SECTION 1 - Prepare deployment information** 
-#' using file "1_downloadable_studies_deployments_filtered.rds", 
-#' - correct manipulation_type - in some cases, manipulation type seem not
-#'   specified correctly, so it is changed in accordance with
-#'   manipulation_comment
-#'   detected problematic manipulation comments:
-#'   - 1. relocated and released for trials; for 2 trials was treated 
-#'    to shift light cycle
-#'   - 2. relocated and released for trials; for 1 trial was treated to shift 
-#'   ight cycle
-#'   - 3. CS (clock-shift)
-#'   - 4. FL
-#'   - 5. XY (magnetically deprived)
-#'   - 6. AO (anosmic)
-#'   - 7. A: anosmia treatment prior to relocation and release
-#'   - 8. CAP: relocated with purified air during transportation
-#'   - 9. animal owned by farm and may have been restricted in movement or
-#'     transported for sale (see Deployment Comments) - couldn't find the column
-#'     deployment comments in the deployment information so we excluded it
-#'     in case the animal was restricted
-#' - add column study_site - to distinguish E4Warning study site and others
-#' - filter deployments that were not downloaded
+#' **SECTION 1 - Label and clean track problems** 
+#' using file specified as file_dep_filter, we listed the downloaded 
+#' deployments. using function detect_track_problems() that encompasses all 
+#' track problems, we label and save them. both tracks with labelled problems 
+#' and cleaned track were saved. in case animal was tracked
+#' with two technologies simultaneously e.g. (SigFox & GPS) the track was split. 
+#' summary of track problems were logged in the file file_track_problem.
 #'
-#' **SECTION 2 - Create output directories**
-#' create directories for track_problmes and cleaned deployments, 
-#' done separately, because it takes much more space and like this we can keep
-#' the data separately. 
-#' 
-#'  **SECTION 3 - Label track problems**
-#'  using function detect_track_problems() that encompasses all track problems, 
-#'  we label them, and save the tracks with labels to be able to check them 
-#'  out later
+#'  **SECTION 2 - Detect duplicated deployments**
+#'  from the file with cleaned tracks, we check for duplicated deployments. 
+#'  specifically we look whether there is duplicated individual local
+#'  identifiers or tag local identifiers that overlap in time period of the 
+#'  deployment. if so, we exclude the track that has shorter duration. 
 #'  
-#'  **SECTION 4 - Summarize track problems**
-#'  obtain the summary of locations with and without problems, this is used
-#'  later to check for duplicated data (track period etc)
-#'  
-#'  
-
 
 # 0 - Define parameters and packages ---------------------------------------
 
@@ -58,12 +33,6 @@ library(sf)
 library(amt)
 source("0_helper_functions.R")
 source("2_clean_deployments_datatable_FUNCTIONS.R")
-
-# columns needed to detect track problems
-cols_gps <- c(
-  "timestamp", "geometry", "gps_hdop", "gps_vdop", "gps_satellite_count", 
-  "sensor_type_id"
-)
 
 # this is the study id from aiguamolls de l'emporda
 E4WarningID <- 4043292285
@@ -77,30 +46,40 @@ file_track_problem <- "2_track_problems_report.csv"
 file_deploy_clean <- "2_deployments_cleaned.csv"
 
 
-# 1 - Create output directories -----------------------------------------------
-
+# DEPLOYMENTS to process
 deployments <- fread(file.path(data_dir, file_dep_filter))[
   , file := make_file_name(study_id, individual_id, deployment_id)
   ]
 
-# create output directories
+# target species
 target_sp <- unique(deployments$birdlife_name)
 
+# OUTPUT DIRECTORIES
 create_dir(target_sp, c("2_track_problems", "2_cleaned"))
 
-# 2 - Label and clean track problems-------------------------------------------
+
+# 1 - Label and clean track problems-------------------------------------------
 
 # here we separate deployments by sensor type id because for some species there
 # is a simultaneous recording with GPS and SixFox
 
 if(!file.exists(file.path(data_dir, file_track_problem))){
   
+  # columns needed to detect track problems
+  cols_gps <- c(
+    "timestamp", "geometry", "gps_hdop", "gps_vdop", "gps_satellite_count", 
+    "sensor_type_id"
+  )
+  
+  # list all downloaded deployments
   deploy_problems <- copy(deployments)[
     , fin_path := get_file_path(file, "1_deployments", birdlife_name)
   ][file.exists(fin_path)][, fin_path]
   
   i_total <- length(deploy_problems)
   
+  # generated the summary of cleaned tracks - including the numeber of
+  # location with problems as well as the cleaned locations
   cleaned_tracks <- rbindlist(lapply(seq_along(deploy_problems), function(i){
     
     fin <- deploy_problems[i]
@@ -136,6 +115,7 @@ if(!file.exists(file.path(data_dir, file_track_problem))){
     
     problems_cleaned <- rbindlist(lapply(track_split, function(t){
       
+      # file path for the labeled track problems
       fout_problem <- gsub(
         ".rds", 
         paste0("_", unique(t$sensor_type_id), "_sen.rds"),
@@ -144,8 +124,10 @@ if(!file.exists(file.path(data_dir, file_track_problem))){
       
       fwrite(t, fout_problem)
       
+      # file path for the cleaned track
       fout_cleaned <- gsub("2_track_problems", "2_cleaned", fout_problem)
       
+      # create track problem summary, clean the track and save it
       problem_summary <- summarize_track_problems(
         track = t, 
         fout = fout_cleaned, 
@@ -169,8 +151,9 @@ if(!file.exists(file.path(data_dir, file_track_problem))){
   
 }
 
-# 3 - Detect duplicated deployments ---------------------------------------
+# 2 - Detect duplicated deployments ---------------------------------------
 
+# load the list of cleaned tracks
 cleaned_tracks <- fread(file.path(data_dir, file_track_problem))[
   track_problem %in% c(NA, "") & saved == T]
 
@@ -188,7 +171,7 @@ cleaned_tracks <- merge(
   cleaned_tracks, deployments, by.x = "original_file", by.y = "file", all.x = T
   )
 
-# if there indiviudal local identifier is not provided check indiviudal id
+# if there individual local identifier is not provided check individual id
 cleaned_tracks[
   individual_local_identifier %in% c("", NA), 
   individual_local_identifier := individual_id
@@ -200,7 +183,7 @@ cleaned_tracks[
   tag_local_identifier := tag_id
 ]
 
-# check if duplicated individual local identifiers overlap in time 
+# CHECK if duplicated individual local identifiers overlap in time 
 cleaned_tracks <- rbindlist(lapply(
   split(
     cleaned_tracks, 
@@ -217,7 +200,7 @@ cleaned_tracks <- rbindlist(lapply(
 ))
 setnames(cleaned_tracks, old = "to_exclude", new = "dup_ind_to_exclude")
 
-# check if duplicated tag local identifiers overlap in time 
+# CHECK if duplicated tag local identifiers overlap in time 
 cleaned_tracks <- rbindlist(lapply(
   split(
     cleaned_tracks, 
@@ -234,6 +217,7 @@ cleaned_tracks <- rbindlist(lapply(
 ))
 setnames(cleaned_tracks, old = "to_exclude", new = "dup_tag_to_exclude")
 
+# save the list of the cleaned tracks with the columns of interest 
 cols_out <- names(cleaned_tracks)[
   grep(
     "file|_id$|_identifier$|track|birdlife|manipulation|deployment|animal|sex|to_exclude", 

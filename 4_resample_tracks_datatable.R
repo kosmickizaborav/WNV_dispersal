@@ -5,19 +5,21 @@
 
 # INFO --------------------------------------------------------------------
 
+#'  **SECTION 0 - Load packages and files**
+#'  
 #'  **SECTION 1 - Calculate sampling rate per track**
-#'  for each track and species summarize the sampling rate
+#'  summarize sampling rate for the cleaned tracks 
 #'  
 #'  **SECTION 2 - Plot sampling rates per species**
-#'  plot the distribution of sampling rates per species using t
-#'  the median sampling rate
+#'  plot the distribution of sampling rates across species using median 
+#'  sampling rate per track in hours
 #'  
-#'  **SECTION 3 - Re-sample track to defined rate**
+#'  **SECTION 3 - Re-sample tracks**
 #'  re-sample the track to a defined rate, in this case 60 minutes
 #'  add day_cycle and day_period columns 
 #'  output saved in "5_resampled" in the species folder
 
-# 0 - Defining parameters and packages ---------------------------------------
+# 0 - Load packages and files --------------------------------------------------
 
 library(data.table)
 library(amt)
@@ -69,7 +71,7 @@ sampling_rate <- merge(
 fwrite(sampling_rate, file.path(data_dir, file_sampling_rate))
 
 
-# 2 - Plot sampling rates per species --------------------------------------
+# 2 - Plot sampling rates across species --------------------------------------
 
 sampling_rate <- sampling_rate[, median_hours := median/60][
   median_hours <= 24]
@@ -95,7 +97,7 @@ ggsave(
 
 
 
-# 2 - Resample tracks -----------------------------------------------------
+# 3 - Resample tracks -----------------------------------------------------
 
 
 # for the data that has high resolution, we first re-sampled the track to, 
@@ -141,7 +143,6 @@ resampled_tracks <- rbindlist(lapply(seq_along(tracks), function(i){
   
 }))
 
-
 resampled_tracks <- merge(
   resampled_tracks, filtered_tracks[, .(birdlife_name, file)], 
   by.x = "fin", by.y = "file")[
@@ -151,6 +152,5 @@ resampled_tracks <- merge(
     resample_tolerance_min = as.numeric(resample_tolerance, units = "mins")
   )]
 names(resampled_tracks)[1] <- "file"
-
 
 fwrite(resampled_tracks, file.path(data_dir, file_resampled_report))

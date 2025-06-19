@@ -5,29 +5,26 @@
 
 # INFO --------------------------------------------------------------------
 
-#' **SECTION 1 - Flight speed limits from literature**
-#' Bird speed data was downloaded from here, and converted from pdf to excel 
-#' using an online converter
-#' https://journals.plos.org/plosbiology/article?id=10.1371/journal.pbio.0050197#s5
-#' Bruderer_2001_extracted_from_paper extracted manually from paper: 
-#' https://onlinelibrary.wiley.com/doi/abs/10.1111/j.1474-919x.2001.tb04475.x
-#'
-#' **SECTION 2 - Speed distribution in unfiltered data**
-#' - explore the speed distribution for each species
-#' - plot graphs of speed and turning angle
-#' - save the quantiles of speed distribution
+#' **SECTION 0 - Load packages and files**
 #' 
-#' **SECTION 3 - Filtering the speed**
-#' using the literature limit for each species, filter the tracks, and save them 
+#' **SECTION 1 - Plot speed and turning angles - unfiltered**
+#' load all the tracks and plot the distribution of speed and turning angle for
+#' all of the unfiltered tracks. and compare it with the theoretical speed limit.
+#' save the information of the speed quantiles.
+#' 
+#' **SECTION 2 - Plot speed quantiles**
+#' plot the quantiles of the speed distribution for each species that are above
+#' and below the applied theoretical speed limit
+#' 
+#' **SECTION 3 - Filter speeds**
+#' using the theoretical speed limit for each species, filter the tracks
+#' and save them.
 #'     
-#' **SECTION 4 - Speed distribution in filtered data**
-#' code almost identical as in section 2 
-#' I avoided using function as it takes longer to compute
-#' - plot graphs of speed and turning angle
-#' - save the quantiles of speed distribution
+#' **SECTION 4 - Filter report**
+#' load filtered and unfiltered data and record how many locations there are
+#' before and after filtering.
 
-
-# 0 - packages and files --------------------------------------------------
+# 0 - Load packages and files --------------------------------------------------
 
 library(data.table)
 library(amt)
@@ -65,15 +62,18 @@ create_dir(target_sp, new_dir = "3_filtered_speed")
 
 if(!file.exists(file.path(data_dir, file_speed_quantiles))){
 
+  # get birdlife phylogeny and if there is no speed limit specified for the 
+  # species, infer one from the family or the order
   target_sp <- add_birdlife_phylogeny(species_name = target_sp)
   target_sp[
     , speed_limit := get_speed_limit(
       species = birdlife_name, family = family, order = order),
     by = birdlife_name]
 
-  # just for reporting on the progress
+  # for progress reporting
   dc <- nrow(target_sp)
 
+  # get the speed and turns distribution for the species across all tracks
   speed_quant_df <- rbindlist(lapply(seq(1, dc), function(i){
 
     sp_name <- target_sp[i, birdlife_name]
@@ -114,6 +114,7 @@ if(!file.exists(file.path(data_dir, file_speed_quantiles))){
       plot = p, width = 16, height = 10, units = "cm",
     )
 
+    # save the quantiles of speed distribution
     quant_df <- as.data.table(
       as.list(
         round(
@@ -175,19 +176,11 @@ if(!file.exists(file.path(graphs_dir, graph_speed_quantiles))){
 }
 
 
-# 3 - Clean speeds --------------------------------------------------------
+# 3 - Filter speeds ------------------------------------------------------------
 
 cleaned_tracks[, fout := gsub("2_cleaned", "3_filtered_speed", file)]
 
-# if(!file.path(data.dir, "3_speed_checked_files.R")){
-#   
-#   speed_checked_files <- copy(cleaned_tracks)[, checked := NA][
-#     , .(file = fout, checked)]
-#     
-#   fread(speed_checked_files, file.path(data.dir, "3_speed_checked_files.R"))
-# } 
-
-
+# get the theoretical speed limit for all the species in the track list
 speed_limits <- add_birdlife_phylogeny(
   df = unique(cleaned_tracks[, .(birdlife_name, sex)]), 
   species_name = "birdlife_name"
@@ -197,12 +190,15 @@ speed_limits <- add_birdlife_phylogeny(
   by = c("birdlife_name", "sex")
 ]
 
+# add the spedd limit to the track info
 cleaned_tracks <- merge(
   cleaned_tracks, speed_limits, by = c("birdlife_name", "sex"), all.x = T
 )
 
 rm(speed_limits)
 
+# check which speed limits were already filtered, and continue the process
+# for the ones that were not
 to_filter <- cleaned_tracks[file.exists(fout) == F][
   , .(file, fout, speed_limit)]
 
@@ -210,6 +206,7 @@ n_tracks <- nrow(to_filter)
 
 invisible(lapply(seq(1, n_tracks), function(i){
   
+  # get speed limit input and output file
   sp_limit <- to_filter[i, speed_limit]
   fin <- to_filter[i, file]
   fout <- to_filter[i, fout]

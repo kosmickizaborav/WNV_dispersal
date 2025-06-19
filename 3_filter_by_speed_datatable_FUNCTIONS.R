@@ -1,9 +1,38 @@
+#' ---
+#' title: "function used to filter by speed datatable"
+#' output: github_document
+#' ---
+
+# INFO --------------------------------------------------------------------
+
+#' **FUNCTION 1 - get_speed_limit**
+#' using the file "00_bird_wing_data_speed_mean.csv", that is generated within
+#' a script 00_prepare_external_files.R, find the speed limit for the species
+#' and its sex. in case it is not available, use the mean value for the family
+#' or order. 
+#' 
+#' **FUNCTION 2 -  plot_speed_turns**
+#' plot histograms of speed and turning angle, and label in which speed quantile
+#' we can find the speed limit applied.
+#' 
+#' **FUNCTION 3 - get_speeds**
+#' function that calculates the speeds from the track data in m/s in the format
+#' of datatable. basically adapted the function for speed calculation that 
+#' is found in amt package
+#'     
+#' **FUNCTION 4 - filter_speed_limit**
+#' function that calculates the speeds in the tracking data, removes a point if
+#' it generates a speed above the applied speed limit, and continues to do it
+#' until all the speeds are below the speed limit.
+
+
 # FUNCTION: get_speed_limit ---------------------------------------------
 
 get_speed_limit <- function(
     species, sex = NULL, summary_func = mean, wind_speed = 0, 
     family = NULL, order = NULL,
-    birdspeed_file = here::here("Published_data", "00_bird_wing_data_speed_mean.csv")
+    birdspeed_file = here::here(
+      "Published_data", "00_bird_wing_data_speed_mean.csv")
     ) {
   
   s <- ifelse(is.null(sex), c(NA, ""), sex)
@@ -36,7 +65,7 @@ get_speed_limit <- function(
   # excluding sex differences
   bird_speeds <- bird_speeds[sex %in% c(NA, "")]
   
-  # helper function to match and compute speed for different phylogenetic levels
+  # helper function to match and compute speed for different phylogeny levels
   match_phylo_and_compute <- function(level) {
     
     if(species_phylo[[level]] %in% bird_speeds[[level]]) {
@@ -81,20 +110,20 @@ plot_speed_turns <- function(
     min_step = 0.001
 ) {
   
-  # Combine quantile calculation and closest index lookup
+  # check within which quantile the speed limit falls
   q <- quantile(df$speed, q_seq, na.rm = TRUE)
   n <- which.min(abs(q - speed_limit))  # Find the closest quantile value
   q_big <- q_seq[n]
   q_value <- q[n]
   
-  # Refine quantiles if the quantile is below 1
+  # refine quantiles if the quantile is below 1
   if (q_big < 1) {
     fq <- quantile(df$speed, seq(q_big, q_big + 0.01, min_step), na.rm = TRUE)
     n <-  which.min(abs(fq - speed_limit))
     q_value <- fq[n]
   }
   
-  # Create a data.table for speed limits to be plotted
+  # create a data.table for speed limits to be plotted
   sp_limits_graph <- data.table(
     speed = c(unname(q_value), speed_limit),
     name = c(paste(names(q_value), "quantile"), "applied speed limit")

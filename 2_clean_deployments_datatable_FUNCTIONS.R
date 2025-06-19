@@ -8,16 +8,22 @@ library(amt)
 #' 1 - imprecise sigfox from Aiguamolls - mark sigfox E4Warning data before 
 #'     putting antenna in the park
 #' 2 - deployment on and off time
-#' 3 - duplicated timestamps (rounded to 1 min)
-#' 4 - gps precision check
-#' 5 - outlier check
-#' 6 - check if there is any sensor type that is not wanted
-#' 7 - empty geometry (no coordinates)
-#' 8 - weird date - year before 1950 or in the future
-#' 9 - weird coordinates - lon > 180 or lat > 90
+#' 3 - gps precision check
+#' 4 - duplicated timestamps (rounded to 1 min)
+#' 5 - empty geometry (no coordinates)
+#' 6 - weird coordinates - lon > 180 or lat > 90
+#' 7 - weird date - year before 1950 or in the future
 #' output is a list with track problems and track info, that will be used to 
 #' cross check with the deployment info
 #' the cleaned track is saved if there are at least 3 points
+#' 
+#' **FUNCTION: summarize_track_problems**
+#' summarize all track problems and their duration, if indicated, save the 
+#' cleaned track as well. 
+#' 
+#' **FUNCTION: find duplicated_tracks**
+#' find which track from the duplicates to exclude based on the track duration. 
+#' if the two tracks overlap in time, exclude the one that has shorter duration.
 
 # FUNCTION: detect_track_problems -----------------------------------------
 
@@ -32,7 +38,7 @@ detect_track_problems <- function(
   
   track_cols <- names(track)
   
-  # 2 - imprecise sigfox from Aiguamolls -----------------------------------------
+  # 1 - imprecise sigfox from Aiguamolls -----------------------------------------
   
   antenna_date <- lubridate::as_datetime("13-11-2024", format = "%d-%m-%Y")
   
@@ -42,13 +48,13 @@ detect_track_problems <- function(
     pre_antenna := if(study_id == 4043292285) timestamp <= antenna_date else NA
   ] 
   
-  # 3 - deployment on and off time ----------------------------------------------
+  # 2 - deployment on and off time ----------------------------------------------
   
   track[
     , out_deploy_time := (timestamp < deploy_on_time | timestamp > deploy_off_time)
   ]
   
-  # 4 - gps precision check ------------------------------------------------------
+  # 3 - gps precision check ------------------------------------------------------
   
   # remove imprecise locations, at the intro to movement ecology course, 
   # they said if the hdop or vdop is bigger than 5
@@ -65,9 +71,7 @@ detect_track_problems <- function(
     NA
   }]
 
-  
-
-# duplicated timestamps ---------------------------------------------------
+# 4 - duplicated timestamps ---------------------------------------------------
 
   track[, row_id := .I]
   # List of columns for ordering
@@ -79,20 +83,23 @@ detect_track_problems <- function(
   cols_order <- intersect(prec_cols, track_cols)
   cols_sort <- prec_order[prec_cols %in% cols_order]
   
+  # full column list
   cols_select <- c("t_rounded", cols_order, "n_na", "row_id")
   cols_sort <- c(1, cols_sort, 1, -1)
   full_cols <- c(cols_select, "sensor_type_id")
   
-  # Process the data in one step
+  # round the timestamp to one minute
   duplicated_times <- track[bad_gps_precision %in% c(F, NA) & out_deploy_time %in% c(F, NA)][
     , t_rounded := lubridate::floor_date(timestamp, unit = "min")]
+  # select the columns
   duplicated_times <- duplicated_times[ , ..full_cols]
   
-  # Construct the sorting logic
+  # construct the sorting logic, order the data.table by the selected columns
   sorting_logic <- do.call(order, lapply(seq_along(cols_select), function(i) {
     if(cols_sort[i] == -1) -duplicated_times[[cols_select[i]]] else duplicated_times[[cols_select[i]]]
   }))
   
+  # label duplicated timestamps
   duplicated_times <- duplicated_times[
     sorting_logic
     ][
@@ -101,31 +108,32 @@ detect_track_problems <- function(
       , .(duplicated_time, row_id)
     ]
   
+  # merge the duplicated labels with the original track
   track <- merge(track, duplicated_times, by = "row_id", all.x = T)[
     , year := year(timestamp)
   ]
   
   rm(duplicated_times)
   
-  
+  # columns to save in the OUTPUT track
   cols_out <- c(cols_out, "track_problem")
   
   track <- track[
     , track_problem := fcase(
-      # 2 - sigfox E4Warning data before putting antenna in the park
+      # 1 - sigfox E4Warning data before putting antenna in the park
       pre_antenna, "E4Warning SigFox pre-antenna",
-      # 3 - check that deployment on and off time match with the track
+      # 2 - check that deployment on and off time match with the track
       out_deploy_time, "out of deployment on-off times",
-      # 4 - eliminate imprecise data
+      # 3 - eliminate imprecise data
       bad_gps_precision, sprintf("hdop or vdop greater than %d", dop_threshold),
       # 4 - duplicated time-stamps - resampled to 1 minute
       duplicated_time, "duplicated timestamp (rounded to min)",
-      # 8 - empty geometry (no coordinates)
+      # 5 - empty geometry (no coordinates)
       is.na(x) | is.na(y), "missing coordinates",
-      # 10 - weird coordinates - lon > 180 or lat > 90
+      # 6 - weird coordinates - lon > 180 or lat > 90
       # the projection is EPSG:4326 (checked) - with test target species
       abs(x) > 180 | abs(y) > 90, "weird coordinates",
-      # 9 - weird date - year before 1950 or in the future
+      # 7 - weird date - year before 1950 or in the future
       year < 1950 | as.Date(timestamp) > Sys.Date(), "weird date",
       default = NA
     )
@@ -147,6 +155,7 @@ summarize_track_problems <- function(
 
   if(is.null(fout)){ stop("Provide a file path for the cleaned track!") }
   
+  # summarize the track problems and their duration
   track_summarized <- track[, .(
     track_start = min(get(time_col), na.rm = T),
     track_end = max(get(time_col), na.rm = T),
@@ -154,7 +163,8 @@ summarize_track_problems <- function(
     n_locs = .N
   ), by = .(track_problem, sensor_type_id)
   ][
-    , track_period_days := round(difftime(track_end, track_start, units = "days"), 2)
+    , track_period_days := round(
+      difftime(track_end, track_start, units = "days"), 2)
   ]
 
     
@@ -163,8 +173,10 @@ summarize_track_problems <- function(
 
    track <- track[track_problem %in% c(NA, "")]
    
+   # select output columns
    if(!is.null(cols_cleaned_track)){ track <- track[, ..cols_cleaned_track] }
   
+   # if there is more than 3 locations, save the track
    if(nrow(track) > 3){
 
      track <- track |>
@@ -180,6 +192,7 @@ summarize_track_problems <- function(
 
    } else {
      
+     # report if the track was saved or not
      track_summarized <- track_summarized[, saved := F][, file := NA]
      
    }
@@ -234,7 +247,9 @@ find_duplicated_tracks <- function(
   )]
   
   # Check for overlaps
-  overlapping[, overlap := c(id1_start, id1_end) %overlaps% c(id2_start, id2_end), by = .I]
+  overlapping[
+    , overlap := c(id1_start, id1_end) %overlaps% c(id2_start, id2_end), 
+    by = .I]
   overlapping <- overlapping[overlap == TRUE]
   
   if (nrow(overlapping) == 0) {
@@ -242,7 +257,7 @@ find_duplicated_tracks <- function(
     return(track_df[, to_exclude := F][, track_id := NULL])
   } 
   
-  if (keep_criteria == "locations") {
+  if(keep_criteria == "locations") {
     
     df <- df[, n_locs := get("n_locs")]
     
@@ -270,7 +285,7 @@ find_duplicated_tracks <- function(
     
   } 
   
-  if (keep_criteria == "duration") {
+  if(keep_criteria == "duration") {
     
     df <- df[, duration := get(duration)]
     
@@ -295,6 +310,6 @@ find_duplicated_tracks <- function(
   track_df <- track_df[
     , to_exclude := track_id %in% excluded][, track_id := NULL]
   
-  # Returns track_id which should be excluded
+  # returns track_id which should be excluded
   return(track_df)
 }
