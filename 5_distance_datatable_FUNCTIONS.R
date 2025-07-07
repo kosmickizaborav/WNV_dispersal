@@ -152,6 +152,7 @@ get_dcp_dist <- function(
   
   # Split into groups for each dcp
   # Group by dcp and calculate summaries
+  # HERE WE SHOULD REMOVE t_min and t_max if there is only one point
   dcp_median <- track_dt[, .(
       n_locs = first(n_locs),
       x_median = median(x_),
@@ -159,8 +160,7 @@ get_dcp_dist <- function(
       t_median = median(t_),
       t_min = min(t_),
       t_max = max(t_)
-    ), 
-    by = c("day_cycle", "day_period")][
+    ), by = c("day_cycle", "day_period")][
       ,  t_span := fifelse(
         n_locs > 1, difftime(t_max, t_min, units = "hours", tz = "UTC"), NA)]
   
@@ -182,59 +182,59 @@ get_dcp_dist <- function(
 
 # FUNCTION 3: get_sleep_steps ------------------------------------------------
 
-get_sleep_steps <- function(track, crs = sf::st_crs(4326)){
+get_sleep_steps <- function(
+    track, 
+    crs = sf::st_crs(4326),
+    day_limits = NULL
+){
   
   no_result <- data.table(dcp_steps_available = FALSE)
   
-  track <- split(track, by = "day_period", keep.by = T)
-
-  all_steps <- rbindlist(lapply(track, function(dcpt){
-    
-    dcpt <- dcpt[!is.na(x_) & !is.na(y_)]
-    
-    if(nrow(dcpt) == 0) {return(no_result)}
-    
-    locs <- dcpt[
-      , geometry := sf::st_as_sf(.SD, coords = c("x_", "y_"), crs = crs), 
-      .SDcols = c("x_", "y_")]
-    setorder(locs, t_)
-    
-    rm(dcpt)
-    
-    if(nrow(locs) < 2){ return(no_result) }
-    
-    # create steps by combining consecutive rows
-    steps <- cbind(
-      # start location of the step
-      locs[-.N, .(
-        t1_ = t_, x1_ = x_, y1_ = y_, geometry_1 = geometry, 
-        day_cycle_1 = day_cycle)], 
-      # end location of the step
-      locs[-1, .(
-        t2_ = t_, x2_ = x_, y2_ = y_, geometry_2 = geometry, 
-        day_cycle_2 = day_cycle)]
-    )
-    
-    # check if the start location and end location are in consecutive days
-    steps <- steps[, consequtive_days := day_cycle_1 == (day_cycle_2 - 1)][
-      consequtive_days == T ][, consequtive_days := NULL]
-    
-    if(nrow(steps) > 0){
-      
-      # Calculate the distances using st_distance
-      steps[
-        , sl_ := sf::st_distance(geometry_1, geometry_2, by_element = T)][
-          , dt_ := difftime(t2_, t1_, units = "hours")][
-            , dcp_steps_available := TRUE][
-              , c("geometry_1", "geometry_2") := NULL]
-      
-      return(steps)
-      
-    } else{ return(no_result) }
-    
-  }), idcol = "day_period", fill = T)
+  track <- track[!is.na(x_) & !is.na(y_)]
   
-  return(all_steps)
+  if(nrow(track) == 0){ return(no_result) }
+  
+  locs <- track[
+    , geometry := sf::st_as_sf(.SD, coords = c("x_", "y_"), crs = crs), 
+    .SDcols = c("x_", "y_")]
+  setorder(locs, t_)
+  
+  rm(track)
+  
+  if(nrow(locs) < 2){ return(no_result) }
+  
+  # create steps by combining consecutive rows
+  steps <- cbind(
+    # start location of the step
+    locs[-.N, .(
+      t1_ = t_, x1_ = x_, y1_ = y_, geometry_1 = geometry, 
+      day_cycle_1 = day_cycle)], 
+    # end location of the step
+    locs[-1, .(
+      t2_ = t_, x2_ = x_, y2_ = y_, geometry_2 = geometry, 
+      day_cycle_2 = day_cycle)]
+  )
+  
+  # check if the start location and end location are in consecutive days
+  steps <- steps[, consequtive_days := day_cycle_1 == (day_cycle_2 - 1)][
+    consequtive_days == T ][, consequtive_days := NULL]
+  
+  if(nrow(steps) > 0){
+    
+    # Calculate the distances using st_distance
+    steps[
+      , sl_ := sf::st_distance(geometry_1, geometry_2, by_element = T)][
+        , dt_ := difftime(t2_, t1_, units = "hours")][
+          , dcp_steps_available := TRUE][
+            , c("geometry_1", "geometry_2") := NULL]
+    
+    return(steps)
+    
+  } else{ return(no_result) }
+  
+} 
+
+
   
   # # Check if day cycle needs to be added
   # if(all(!c("day_cycle", "day_period") %in% colnames(track))){
@@ -250,8 +250,6 @@ get_sleep_steps <- function(track, crs = sf::st_crs(4326)){
   #   .SD[which.max(t_)],    
   #   by = day_cycle
   # ])
-  
-} 
 
 
 
@@ -285,10 +283,10 @@ get_active_steps <- function(
   
   if(is.null(track)){ return(no_result) }
   
-  if(is.null(sleep_locs)){ sleep_locs <- track }
+  if(is.null(sleep_locs)){ sleep_locs <- copy(track) }
   
   # making sure they come from the right period
-  sleep_locs <- sleep_locs[day_period == s_start]
+  sleep_locs <- sleep_locs[day_period == s_start][!is.na(x_) & !is.na(y_)]
   
   if(nrow(sleep_locs) == 0){ return(no_result) }
   
@@ -299,35 +297,41 @@ get_active_steps <- function(
     .SDcols = c("x1_", "y1_")]
   
   # get active locations
-  active_locs <- unique(track[day_period == s_end])[
+  active_locs <- track[day_period == s_end][!is.na(x_) & !is.na(y_)]
+  
+  if(nrow(active_locs) == 0) {return(no_result)}
+  
+  active_locs <- active_locs[ 
     , .(t2_ = t_, x2_ = x_, y2_ = y_, day_cycle_2 = day_cycle)][
     , day_cycle_1 := day_cycle_2 - day_cycle_diff][
     , geometry_2 := sf::st_as_sf(.SD, coords = c("x2_", "y2_"), crs = crs), 
     .SDcols = c("x2_", "y2_")]
   
-  steps <- merge(sleep_locs, active_locs, by = "day_cycle_1", all.x = TRUE)[
-    !sf::st_is_empty(geometry_2) & !sf::st_is_empty(geometry_1)]
+  steps <- merge(sleep_locs, active_locs, by = "day_cycle_1")
   
   if(nrow(steps) > 0){
     
-    steps[, sl_ := sf::st_distance(geometry_1, geometry_2, by_element = TRUE)][
-      , `:=`(
-        sl_min    = min(sl_), #if (.N == 1) NA else 
-        sl_mean   = mean(sl_),
-        sl_median = median(sl_),
-        sl_n_steps = .N
-      ),
-      by = day_cycle_1
-    ][
-      , c("geometry_1", "geometry_2") := NULL
-    ]
+    steps[
+      , sl_ := sf::st_distance(geometry_1, geometry_2, by_element = TRUE)][
+      , sl_n_steps := .N, by = day_cycle_1]
+    steps[ , geometry_1 := NULL][, geometry_2 := NULL]
+    
+    stat_cols <- c("sl_min", "sl_mean", "sl_median")
+    
+    steps[, (stat_cols) := 
+        if (.N == 1) list(NA_real_, NA_real_, NA_real_) 
+        else list(min(sl_), mean(sl_), median(sl_)), 
+      by = day_cycle_1]
+    
+    steps[, (stat_cols) := 
+            lapply(.SD, units::set_units, "m"), .SDcols = stat_cols]
     
     setorder(steps, t1_)
     
+    # which max returns the first highest value
     steps <- steps[, .SD[which.max(sl_)], by = day_cycle_1][
       , active_steps_available := TRUE][
       , step_type := paste0(s_start, "_", s_end)]
-    
     
     return(steps)
     
@@ -339,22 +343,19 @@ get_active_steps <- function(
 # FUNCTION 5: add_worldmap_data ---------------------------------------------
 
 add_worldmap_data <- function(
-    steps, crs = sf::st_crs(4326), align_start = T, scale = "medium", 
+    steps, crs = sf::st_crs(4326), align_start = T, 
+    coord_cols = NULL, scale = "medium", 
     world_cols = c("continent", "sovereignt", "admin")){
   
   # overlay the map with start or the end point of the step (didn't check both
   # to preserve the country information in case we need it later)
-  if(align_start){
-    
-    steps <- steps[
-      , geometry := sf::st_as_sf(
-        .SD, coords = c("x1_", "y1_"), crs = crs), .SDcols = c("x1_", "y1_")] 
-  } else{
-    
-    steps <- steps[
-      , geometry := sf::st_as_sf(
-        .SD, coords = c("x2_", "y2_"), crs = crs), .SDcols = c("x2_", "y2_")] 
+  if(is.null(coord_cols)){
+    coord_cols <- if(align_start) c("x1_", "y1_") else c("x2_", "y2_")
   }
+  
+  steps <- steps[
+    , geometry := sf::st_as_sf(
+      .SD, coords = coord_cols, crs = crs), .SDcols = coord_cols] 
   
   # columns to add to the data
   world_cols_geo <- c(world_cols, "geometry")
@@ -371,6 +372,212 @@ add_worldmap_data <- function(
   return(steps)
   
 }
+
+# FUNCTION 6: get_month_limits -----------------------------------------------
+
+get_month_limits <- function(year = 2020) {
+  
+  # Create a data.table with months of the year
+  month_limits <- data.table(month = 1:12)
+  
+  # Add columns for the first and last day of each month
+  month_limits[, `:=`(
+    first_date = as.Date(sprintf("%d-%02d-01", year, month)),  # Start of the month
+    last_date = lubridate::ceiling_date(
+      as.Date(sprintf("%d-%02d-01", year, month)), "month") - 1
+  )]
+  
+  # Calculate the yearday for the start and end of each month
+  month_limits[, `:=`(
+    first_yd = as.POSIXlt(first_date)$yday + 1, 
+    last_yd = as.POSIXlt(last_date)$yday + 1, 
+    month = lubridate::month(month, label = T))][
+      , mid_yd := first_yd + (last_yd - first_yd)/2]
+  
+  return(month_limits[, .(month, first_yd, mid_yd, last_yd)])
+}
+
+
+# FUNCTION 7: plot_median_distance ------------------------------------------
+
+
+plot_median_distance <- function(dt, pal = c("#FF9933", "#481A6CFF")){
+  
+  names(pal) <- c(
+    grep("day", levels(dt$step_type), value = T), 
+    grep("night", levels(dt$step_type), value = T))
+  
+  month_limits <- get_month_limits()
+  mb <- ggplot(month_limits) +
+    geom_text(aes(x = mid_yd, y = 1, label = month), hjust = 0.5, vjust = 0.5) +
+    geom_vline(aes(xintercept = last_yd), color = "gray33") +
+    scale_x_continuous(expand = c(0, 0), limits = c(1, 366)) +
+    scale_y_continuous(expand = c(0, 0), limits = c(0, 2)) +
+    theme_void() + # Remove everything
+    theme(
+      plot.margin = margin(0, 0, 0, 0, "mm"),
+      panel.spacing = unit(0, "mm"), 
+      panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5)
+    ) 
+  
+  # Compute label positions per facet: x center, y max + margin
+  #label_dt <- data.table(step_type = levels(dt$step_type))
+  label_dt <- dt[, .(y = max(sl_km_median, na.rm = TRUE) * 1.1), by = step_type][
+    , y := ifelse(is.na(y)|is.infinite(y), 0, y)][, x := 183]
+  
+  # Day steps: ribbon for IQR, line for median
+  pm <- ggplot(dt) +
+    geom_vline(
+      data = month_limits, aes(xintercept = last_yd), color = "gray33"
+    ) +
+    geom_point(aes(x = yd, y = sl_km_median, color = step_type)) +
+    # geom_ribbon(
+    #   aes(ymin = get(qmin), ymax = get(qmax), fill = step_type), alpha = 0.3
+    # ) +
+    geom_line(aes(x = yd, y = sl_km_median, color = step_type), linewidth = 1) +
+    # Colored label at top center of each facet
+    geom_label(
+      data = label_dt, 
+      aes(x = x, y = y, label = step_type, fill = step_type), 
+      color = "white", fontface = "bold", size = 5,
+      label.padding = unit(0.3, "lines"),
+      label.r = unit(0.25, "lines"),
+      show.legend = FALSE
+    ) +
+    labs(y = "median step length per day [km]") +
+    # Scales & themes
+    scale_fill_manual(values = pal) +
+    scale_color_manual(values = pal) +
+    scale_x_continuous(
+      expand = c(0, 0), limits = c(1, 366), breaks = seq(1, 366, 30)) +
+    facet_wrap(~step_type, ncol = 1, scales = "free_y", drop = F) +
+    theme_bw() +
+    theme(
+      legend.position = "none",
+      strip.text = element_blank(),
+      axis.ticks = element_blank(),
+      axis.text.x = element_blank(),
+      axis.title.x = element_blank(),
+      panel.spacing = unit(2, "mm"),
+      panel.background = element_blank()
+    )
+  
+  count_df <- unique(dt[, .(yd, count = n_steps, step_type)])
+  
+  pc <- ggplot(count_df, aes(x = yd, y  = count, color = step_type)) + 
+    geom_line(linewidth = 1.2, alpha = 0.7) +
+    geom_vline(
+      data = month_limits, aes(xintercept = last_yd), color = "gray33"
+    ) +
+    scale_x_continuous(
+      expand = c(0, 0), limits = c(1, 366), breaks = seq(1, 366, 30)) +
+    scale_y_continuous(limits = c(0, max(count_df$count) * 1.1)) +
+    theme_bw() +
+    labs(x = "year day", y = "step count") +
+    scale_color_manual(values = pal) +
+    theme(
+      plot.margin = margin(0, 0, 0, 0, "mm"),
+      panel.spacing = unit(0, "mm"), 
+      axis.ticks = element_blank(), 
+      panel.background = element_blank(), 
+      legend.position = "none"
+    ) 
+  
+  
+  mb / pm /pc  + patchwork::plot_layout(heights =  c(0.1, 1, 0.4)) +
+    plot_layout(guides = "collect") 
+  
+}
+
+
+
+# FUNCTION 6: plot_median_distance SUBECOL
+# plot_median_distance <- function(dt, limit = NULL){
+#   
+#   month_limits <- get_month_limits()
+#   
+#   # plot month labels and limits
+#   mb <- ggplot(month_limits) +
+#     geom_text(aes(x = mid_yd, y = 1, label = month), hjust = 0.5, vjust = 0.5) +
+#     geom_vline(aes(xintercept = last_yd), color = "gray33") +
+#     scale_x_continuous(expand = c(0, 0), limits = c(1, 366)) +
+#     scale_y_continuous(expand = c(0, 0), limits = c(0, 2)) +
+#     theme_void() + # Remove everything
+#     theme(
+#       plot.margin = margin(0, 0, 0, 0, "mm"),
+#       panel.spacing = unit(0, "mm"), 
+#       panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5)
+#     ) 
+#   
+#   # Day steps: ribbon for IQR, line for median
+#   pd <- ggplot(dt) +
+#     geom_vline(
+#       data = month_limits, aes(xintercept = last_yd), color = "gray33") +
+#     geom_ribbon(
+#       aes(x = yd, ymin = q25_day, ymax = q75_day), 
+#       fill = "#FDE725FF", alpha = 0.3
+#     ) +
+#     geom_line(aes(x = yd, y = q50_day), color = "#FDE725FF", linewidth = 2) +
+#     labs(y = "steps [m]", x = "year day") +
+#     scale_x_continuous(
+#       expand = c(0, 0), limits = c(1, 366), breaks = seq(1, 366, 30)) +
+#     theme_bw() +
+#     theme(
+#       legend.position = "none", 
+#       plot.margin = margin(0, 0, 0, 0, "mm"),
+#       panel.spacing = unit(0, "mm"), 
+#       axis.ticks = element_blank(), 
+#       axis.text.x = element_blank(), 
+#       axis.title = element_blank()
+#     )
+#   
+#   pn <- ggplot(dt) +
+#     geom_vline(
+#       data = month_limits, aes(xintercept = last_yd), color = "gray33") +
+#     geom_ribbon(
+#       aes(x = yd, ymin = q25_night, ymax = q75_night), 
+#       fill = "#481A6CFF", alpha = 0.3) +
+#     geom_line(aes(x = yd, y = q50_night), color = "#481A6CFF", linewidth = 2) +
+#     geom_hline(aes(yintercept = limit), color = "#ed5426", linewidth = 0.7) +
+#     labs(y = "steps [m]", x = "year day") +
+#     scale_x_continuous(
+#       expand = c(0, 0), limits = c(1, 366), breaks = seq(1, 366, 30)) +
+#     theme_bw() +
+#     theme(
+#       plot.margin = margin(0, 0, 0, 0, "mm"),
+#       panel.spacing = unit(0, "mm"), 
+#       axis.ticks = element_blank(), 
+#       axis.text.x = element_blank(),
+#       axis.title = element_blank()
+#     )
+#   
+#   counts_df <- unique(dt[, .(yd, count = n_file)])
+#   counts_df <- rbindlist(list(
+#     CJ(yd = 1:366, count = 0), counts_df), fill = T)[
+#       , .(count = sum(count)), by = "yd"]
+#   
+#   pc <- ggplot(counts_df, aes(y = count, x = yd)) + 
+#     geom_step(color = "#009580", linewidth = 2, alpha = 0.7) +
+#     geom_vline(
+#       data = month_limits, aes(xintercept = last_yd), color = "gray33"
+#     ) +
+#     scale_x_continuous(
+#       expand = c(0, 0), limits = c(1, 366), breaks = seq(1, 366, 30)) +
+#     theme_bw() +
+#     labs(x = "year day")
+#   theme(
+#     plot.margin = margin(0, 0, 0, 0, "mm"),
+#     panel.spacing = unit(0, "mm"), 
+#     axis.ticks = element_blank(), 
+#     axis.title.y = element_blank()
+#   ) 
+#   
+#   
+#   mb / pd /pn /pc  + patchwork::plot_layout(heights =  c(0.1, 1, 1, 0.4)) +
+#     plot_layout(guides = "collect") & 
+#     theme(legend.position = "bottom")
+#   
+# }
 
 
 

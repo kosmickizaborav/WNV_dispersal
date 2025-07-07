@@ -87,14 +87,14 @@ make_file_name <- function(
 
 # # FUNCTION 2: get_file_path -------------------------------------------
 
-get_file_path <- function(file, folder, species, data_dir = here::here("Data")){
-
-  file_paths <- file.path(
-    data_dir, "Studies", gsub(" ", "_", species), folder, file
-    )
-
-  return(file_paths)
-}
+# get_file_path <- function(file, folder, species, data_dir = here::here("Data")){
+# 
+#   file_paths <- file.path(
+#     data_dir, "Studies", gsub(" ", "_", species), folder, file
+#     )
+# 
+#   return(file_paths)
+# }
 
 
 # # check_file_exists <-  ---------------------------------------------------

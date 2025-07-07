@@ -66,33 +66,48 @@
 
 library(data.table)
 library(move2)
+library(keyring)
 source("0_helper_functions.R")
 source("1_download_movebank_datatable_FUNCTIONS.R")
+
+keyring_unlock("system")
 
 # main ouput directory
 data_dir <- here::here("Data")
 if (!dir.exists(data_dir)) dir.create(data_dir)
 
+birdlife <- fread(
+  here::here("Published_data", "00_birdlife_classification.csv"))[
+    , .(scientific_name, synonym, sp_status, family, order)]
+
+birdlife <- melt(
+  birdlife,
+  id.vars = c("family", "order"),
+  measure.vars = c("scientific_name", "synonym"),
+  variable.name = "name_type",
+  value.name = "sci_name",
+  na.rm = TRUE)
+
 # extended species list
-WNV_prevalence <- here::here(
-  "Alex_data", "Palearctic_prevalence bird_species.xlsx") |>
-  readxl::read_xlsx() |> 
-  as.data.table()
-
-# take only species names that are have group pravelence > 0
-sp_to_check <- WNV_prevalence[,BirdLife_name := squish_base(BirdLife_name)][
-  group_prevalence > 0 & grepl(" ", BirdLife_name), BirdLife_name]
-
-# check that names match birdlife names
-target_sp_birdlife <- rename_to_birdlife(species_name = sp_to_check)
-
-# to be able to search the database based on both synonyms provided and 
-# original birdlife name
-target_sp <- unique(
-  c(target_sp_birdlife$original_name, target_sp_birdlife$birdlife_name)
-  )
-
-rm(sp_to_check, WNV_prevalence, target_sp_birdlife)
+# WNV_prevalence <- here::here(
+#   "Alex_data", "Palearctic_prevalence bird_species.xlsx") |>
+#   readxl::read_xlsx() |> 
+#   as.data.table()
+# 
+# # take only species names that are have group pravelence > 0
+# sp_to_check <- WNV_prevalence[,BirdLife_name := squish_base(BirdLife_name)][
+#   group_prevalence > 0 & grepl(" ", BirdLife_name), BirdLife_name]
+# 
+# # check that names match birdlife names
+# target_sp_birdlife <- rename_to_birdlife(species_name = sp_to_check)
+# 
+# # to be able to search the database based on both synonyms provided and 
+# # original birdlife name
+# target_sp <- unique(
+#   c(target_sp_birdlife$original_name, target_sp_birdlife$birdlife_name)
+#   )
+# 
+# rm(sp_to_check, WNV_prevalence, target_sp_birdlife)
 
 # OUTPUT FILES
 file_stu <- "1_downloadable_studies.csv"
@@ -123,33 +138,23 @@ if (!file.exists(file.path(data_dir, file_stu))) {
 # Check if deployment file exists
 if (!file.exists(file.path(data_dir, file_dep_all))) {
   
-  studies <- fread(file.path(data_dir, file_stu))
+  studies <- fread(file.path(data_dir, file_stu))[, .(id, account, taxon_ids)]
   
-  # extract all study ids from studies
-  taxon_ids <- unique(
-    squish_base(
-      unlist(
-        strsplit(studies[!grepl("test|calibration", taxon_ids), taxon_ids], ",")
-      )
-    )
-  )
-    
-  # Create a taxon filter for genus (any incomplete scientific names) 
-  # and target species
-  taxon_filter <- paste(
-    c(grep(" ", taxon_ids, invert = TRUE, value = TRUE), target_sp), 
-    collapse = "|"
-    )
+  # getting the taxon specification for the study
+  studies <- studies[
+    , .(taxon_id = unlist(strsplit(taxon_ids, ","))), by = .(id, account)]
   
-  # keep only study ids where the previously defined taxon filter is detected
-  id_to_download <- studies[
-      grepl(taxon_filter, taxon_ids) |
-        grepl(taxon_filter, name) |
-        grepl(taxon_filter, study_objective),
-      .(id, account)
-    ]
+  studies <- studies[
+    taxon_id %in% birdlife$sci_name | 
+      taxon_id %in% birdlife$genus |
+      taxon_id %in% unique(birdlife$family) |
+      taxon_id %in% unique(birdlife$order) |
+      taxon_id %in% c("Aves", "Animalia")]
+  
+  id_to_download <- unique(studies[, .(id, account)])
   
   # download deployment metadata
+  # checked deployments with NA values for taxon_ids
   deployments <- download_deployment_metadata(
     id_to_download,
     save_file = T, 
@@ -157,11 +162,12 @@ if (!file.exists(file.path(data_dir, file_dep_all))) {
     accepted_manipulation =  c("none", "relocated"), 
     file_name = file_dep_all, 
     file_dir = data_dir
-    )
+  )
   
-  rm(studies, taxon_ids, taxon_filter, id_to_download)
+  rm(studies, id_to_download)
   
 }
+
 
 # 3 - Filter deployments --------------------------------------------------
 
@@ -172,29 +178,29 @@ if(!file.exists(file.path(data_dir, file_dep_filter))){
   
   # remove extra spaces in case there are
   sp_cols <- c("taxon_canonical_name", "taxon_detail")
-  deployments[, (sp_cols) := lapply(.SD, function(x) {
-    squish_base(x)}), .SDcols = sp_cols]
+  deployments[, (sp_cols) := lapply(.SD, squish_base), .SDcols = sp_cols]
   
   # create a new column scientific_name, to extract potential species names that 
   # we missed
   deployments_filtered <- deployments[ , scientific_name := taxon_canonical_name ]
-  deployments_filtered[ , scientific_name := fcase(
-    grepl(" ", scientific_name), scientific_name, 
+  deployments_filtered[, scientific_name := fcase(
+    grepl("^[^ ]+ [^ ]+$", scientific_name), scientific_name, 
     # in case family is specified seems like species is in taxon detail
-    grepl("idae$|Aves|Animalia", scientific_name), to_sentence_base(taxon_detail),
-    grepl(" ", taxon_detail) & (!grepl(" ", scientific_name) | is.na(scientific_name)),  to_sentence_base(taxon_detail),
+    grepl("idae$|formes$|Aves|Animalia", scientific_name), to_sentence_base(taxon_detail),
+    grepl(" ", taxon_detail) & (!grepl("^[^ ]+ [^ ]+$", scientific_name) | scientific_name == ""),  to_sentence_base(taxon_detail),
     # when genus was specified epitaph of the species is in taxon detail
-    !grepl(" ", taxon_detail), to_sentence_base(paste(scientific_name, taxon_detail)), 
+    !grepl("^[^ ]+ [^ ]+$", taxon_detail), to_sentence_base(paste(scientific_name, taxon_detail)), 
     default = scientific_name
   ) ]
-  deployments_filtered <- deployments_filtered[grepl(" ", scientific_name)]
+  
+  deployments_filtered <- deployments_filtered[
+    scientific_name %in% birdlife$sci_name]
   
   # match the species names to birdlife names and filter only deployments
   # that contain target species
   deployments_filtered <- rename_to_birdlife(
-    deployments_filtered, species_name = "scientific_name"
-  )[scientific_name %in% target_sp | birdlife_name %in% target_sp]
-  
+    deployments_filtered, species_name = "scientific_name")
+
   # after checking the manipulation comments, we excluded some of the 
   # deployments that seemed to manipulate the animal more than just 
   # relocation
@@ -229,7 +235,7 @@ if(!file.exists(file.path(data_dir, file_dep_filter))){
   
 } 
 
-rm(file_dep_all, file_stu, target_sp)
+rm(file_dep_all, file_stu)
 
 
 # 4 - Download individual deployments -------------------------------------
@@ -248,7 +254,7 @@ create_dir(
 )
 
 # download individual deployments
-download_report <- download_individual_deployments(
+download_individual_deployments(
     deployments_filtered, 
     tag_ids = c("gps", "sigfox-geolocation"),
     studies_dir = here::here("Data", "Studies"), 
@@ -257,6 +263,24 @@ download_report <- download_individual_deployments(
 ) 
 
 # save download report
-fwrite(download_report, file.path(data_dir, file_down_report))
+# fwrite(download_report, file.path(data_dir, file_down_report))
+
+# create download report
+down_deps <- list.files(
+  data_dir, pattern = "_dep.rds|_dep_error.rds", full.names = T, recursive = T)
+
+download_report <- rbindlist(lapply(down_deps, function(f){
+  data.table(file = f, downloaded_on = file.mtime(f))}))
+
+# extract species
+download_report[, species := gsub(
+  "_", " ", gsub(".*/Studies/(.*?)/1_deployments/.*", "\\1", file))]
+
+# check if downloaded 
+download_report[, error_occured := grepl("_error", file)]
 
 
+error_log <- rbindlist(lapply(
+  grep("error", down_deps, value = T), function(f){
+    readRDS(f)[, .(file = f, error_message = error)]}))
+                          

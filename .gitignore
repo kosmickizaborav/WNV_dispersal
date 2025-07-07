@@ -5,6 +5,9 @@
 
 # ignore all files in any directory named build
 Data/
+Data2/
 Best_practices/
 Anne_data/
 Alex_data/
+tidyverse_scripts/
+Published_data/

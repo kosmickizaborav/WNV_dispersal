@@ -51,11 +51,8 @@ deployments <- fread(file.path(data_dir, file_dep_filter))[
   , file := make_file_name(study_id, individual_id, deployment_id)
   ]
 
-# target species
-target_sp <- unique(deployments$birdlife_name)
-
 # OUTPUT DIRECTORIES
-create_dir(target_sp, c("2_track_problems", "2_cleaned"))
+create_dir(list.files(study_dir), c("2_track_problems", "2_cleaned"))
 
 
 # 1 - Label and clean track problems-------------------------------------------
@@ -71,6 +68,10 @@ if(!file.exists(file.path(data_dir, file_track_problem))){
     "sensor_type_id"
   )
   
+  
+  dep_files <- list.files(
+    file.path(study_dir, list.files(study_dir), "1_deployments"), 
+    pattern = "dep.rds")
   # list all downloaded deployments
   deploy_problems <- copy(deployments)[
     , fin_path := get_file_path(file, "1_deployments", birdlife_name)

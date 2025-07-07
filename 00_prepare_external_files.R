@@ -161,7 +161,7 @@ dir <-  here("Published_data")
 # 
 # 
 # 
-# # 3 -----------------------------------------------------------------------
+# # 3 - Speed limits wingspan --------------------------------------------------
 # 
 # birdwing <- file.path(dir, "BirdWingData_tidy_ver2.1.csv")|> 
 #   read_csv(show_col_types = F) |> 
@@ -241,6 +241,13 @@ birdwing_speeds |>
     by = "scientific_name"
   ) |> 
   write_csv(file.path(dir, "00_bird_wing_data_speed_mean.csv"))
+
+
+
+
+# 3 - Traits --------------------------------------------------------------
+
+
 
 
 

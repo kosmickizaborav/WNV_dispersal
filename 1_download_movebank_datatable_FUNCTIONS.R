@@ -49,9 +49,9 @@
 #' - if no error occurred but no data available to save, annotate it
 #' - if data available, save it and return file name
 #' >>> INPUT:
-#' 1 - deploy_info - data.table with deployment metadata, must contain account, 
+#' 1 - depinf - data.table with deployment metadata, must contain account, 
 #'     study_id, individual_id, deployment_id, and species_col (species name)
-#' 2 - species_col - character, column name with species names in deploy_info
+#' 2 - species_col - character, column name with species names in depinf
 #' 3 - tag_ids - character vector with sensor type names,
 #' 4 - studies_dir - character, directory to save the studies
 #' 5 - sub_dir - character, sub-directory to save the studies, if NA, saves in the
@@ -97,7 +97,8 @@ download_study_metadata <- function(
   # initialize the result by combining filtered studies across accounts
   studies_list <- lapply(movebank_accounts, function(account) {
     
-    message(sprintf("Downloading Movebank data from the account: %s", account))
+    message(
+      sprintf("\nDownloading Movebank data from the account: %s", account))
     
     # set the Movebank API key for the current account
     options("move2_movebank_key_name" = account)
@@ -125,7 +126,7 @@ download_study_metadata <- function(
     file_path <- file.path(file_dir, file_name)
     fwrite(studies, file_path)
     
-    message(sprintf("Study metadata saved to: %s", file_path))
+    message(sprintf("\nStudy metadata saved to: %s", file_path))
     
   }
   
@@ -175,13 +176,10 @@ download_deployment_metadata <- function(
   )
   
   if(any(!accepted_manipulation %in% manipulation_types)){
-    stop("The 'accepted_manipulation' parameter must be a character vector with the correct manipulation types.\n Check Movebank attribute dictionary for correct values.")
+    stop("The 'accepted_manipulation' parameter must be a character vector 
+         with the correct manipulation types.
+         Check Movebank attribute dictionary for correct values.")
   }
-  
-  if("none" %in% accepted_manipulation){
-    accepted_manipulation <- c("", accepted_manipulation)
-  }
-  
   
   if(save_file == T && is.null(file_name)){
     stop("If 'save_file' is TRUE, please provide a file name.")
@@ -248,7 +246,14 @@ download_deployment_metadata <- function(
   
   # filter deployments
   deployments <- deployments[grepl(paste(tag_ids, collapse = "|"), sensor_type_ids)]
-  deployments <- deployments[manipulation_type %in% accepted_manipulation]
+  
+  deployments <- deployments[
+    grepl(paste(accepted_manipulation, collapse = "|"), manipulation_type) |
+      manipulation_type %in% c("", NA)]
+  
+  # remove empty strings if it's not specified
+  if(!"none" %in% accepted_manipulation){
+    deployments <- deployments[!manipulation_type %in% c("", NA)] }
   
   # # save file if specifies
   if(save_file){
@@ -263,140 +268,273 @@ download_deployment_metadata <- function(
   return(deployments)
 }
 
+
 # FUNCTION: download_individual_deployments -----------------------------------
 
 download_individual_deployments <- function(
-    deploy_info, 
+    deploy_info,
     tag_ids = c("gps", "sigfox-geolocation"),
-    studies_dir = here::here("Data", "Studies"), 
-    species_col = "birdlife_name", 
-    sub_dir = NA 
+    studies_dir = here::here("Data", "Studies"),
+    species_col = "birdlife_name",
+    sub_dir = NA
 ) {
-  
+
   col_check <- c("account", "study_id", "individual_id", "deployment_id")
-  
-  if(all(c(col_check, species_col) %in% names(deploy_info)) == F){
-    stop(
-      "The input data.table must contain the following columns: ", 
-      paste(col_check, collapse = ", "), 
-      " and the correct column with species names provided as a function parameter."
-    )
-  }
-  
+  if (!all(c(col_check, species_col) %in% names(deploy_info))) {
+
+    stop("The input data.table must contain: ",
+      paste(col_check, collapse = ", "),
+      " and the correct column with species names.")
+
+    }
+
   # check if the tag_ids are valid
   tag_external_id <- c(
-    "bird-ring", "gps", "radio-transmitter", "argos-doppler-shift", 
-    "natural-mark", "acceleration", "solar-geolocator", "accessory-measurements", 
+    "bird-ring", "gps", "radio-transmitter", "argos-doppler-shift",
+    "natural-mark", "acceleration", "solar-geolocator", "accessory-measurements",
     "solar-geolocator-raw", "barometer", "magnetometer", "orientation",
-    "solar-geolocator-twilight", "acoustic-telemetry", "gyroscope", "heart-rate", 
+    "solar-geolocator-twilight", "acoustic-telemetry", "gyroscope", "heart-rate",
     "sigfox-geolocation", "proximity", "geolocation-api", "gnss",
     "derived", "tdr", "atlas-geolocation"
   )
-  
+
   tag_numb <- c(397, 653, 673, 82798, 2365682, 2365683, 3886361, 7842954, 9301403,
                 77740391, 77740402, 819073350, 914097241, 1239574236, 1297673380,
                 2206221896, 2299894820, 2645090675, 3090218812, 3090218818, 3090218819,
                 4264744764, 4342918458)
-  
+
   if(any(!tag_ids %in% c(tag_external_id, tag_numb))){
-    stop("The 'tags_ids' parameter must be a character or numeric vector with the correct tag exernal_id or id. Check Movebank specification")
+    stop(
+      "The 'tags_ids' parameter must be a character or numeric vector with
+      the correct tag exernal_id or id. Check Movebank specification")
   }
-  
-  # create a file name and file_path for each deployment
-  deploy_info[, file := paste0(
+
+  depinf <- copy(deploy_info)
+
+  depinf[, file := paste0(
     study_id,  "_stu_", individual_id, "_ind_", deployment_id, "_dep", ".rds")]
-  deploy_info[, file_path := file.path(
+  depinf[, fout := file.path(
     studies_dir, gsub(" ", "_", get(species_col)), sub_dir, file)]
-  deploy_info[, downloaded_before := file.exists(file_path)]
-  deploy_info[, file := NULL]
-  
-  deploy_info[, row_id := .I]
-  
-  rows_to_download <- deploy_info[downloaded_before == F, row_id]
-  
-  # Function to process each row
-  process_by_row <- function(
-    account, study_id, deployment_id, individual_id, file_path, index
-  ) {
+
+  depinf[, downloaded_before := file.exists(fout) |
+      file.exists(gsub(".rds", "_error.rds", fout))]
+  depinf[, file := NULL]
+
+  depinf <- depinf[downloaded_before == F]
+
+  total <- nrow(depinf)
+
+  if(total == 0){
+    message("All deployments already downloaded.")
+    return(invisible(NULL))
+  }
+
+  for(i in seq_len(total)) {
+
+    message(sprintf("\nDownloading track %d of %d!", i, total))
     
-    # Set the Movebank API key for the account
-    options("move2_movebank_key_name" = account)
+    drow <- depinf[i,]
+
+    # acc <- dep_row$account
+    # pw <- key_get(
+    #   service = acc, 
+    #   username = key_list()$username[which(key_list()$service == acc)])
     
-    # Attempt to download the deployment data with error handling
-    tryCatch(
-      {
-        # Call the Movebank download function
-        track <- movebank_download_study(
-          study_id = study_id,
-          individual_id = individual_id, 
-          deployment_id = deployment_id, 
-          sensor_type_id = tag_ids,
-          remove_movebank_outliers = TRUE,
-          omit_derived_data = TRUE,
-          convert_spatial_columns = TRUE,
-          attributes = "all"
-        ) |> 
-          dplyr::select(where(~!all(is.na(.))))
+    # callr::r(function(drow, tag_ids, movebank_acc, movebank_pw){
+      
+      options(move2_movebank_user = drow$account)
+      #options(move2_movebank_password = as.character(movebank_pw))
+      
+      file_path <- drow$fout
+      
+      tryCatch({
+        track <- R.utils::withTimeout(
+          movebank_download_study(
+            study_id = drow$study_id,
+            individual_id = drow$individual_id,
+            deployment_id = drow$deployment_id,
+            sensor_type_id = tag_ids,
+            remove_movebank_outliers = TRUE,
+            omit_derived_data = TRUE,
+            convert_spatial_columns = TRUE,
+            attributes = "all"
+          ) |> 
+            dplyr::select(where(~!all(is.na(.)))),
+          timeout = 3000,
+          onTimeout = "error"
+        )
         
-        if(nrow(track) > 0){
+        if (nrow(track) > 0) {
           
           saveRDS(track, file_path, compress = F)
-          
           rm(track)
-          return(data.table(row_id = index, downloaded_on = Sys.time()))
           
+        } else {
           
-        } else{
+          drow <- as.data.table(drow)
+          drow[ , error := "no data for the deployment"]
+          saveRDS(drow, gsub(".rds", "_error.rds", file_path), compress = F)
+          rm(drow)
           
-          rm(track)
-          return(
-            data.table(row_id = index, error = "no data for the deployment"))
         }
-        
       }, error = function(e) {
         
-        # Return an error table if the download fails
-        message("An error occurred!")
+        drow <- as.data.table(drow)
+        drow[, error := e$message]
+        saveRDS(drow, gsub(".rds", "_error.rds", file_path), compress = F)
+        rm(drow)
         
-        return(data.table(row_id = index, error = e$message))
-      }
-    )
-  }
-  
-  total <- length(rows_to_download)
-  
-  # Apply the function to each row of the input data.table
-  download_report <- rbindlist(
-    lapply(seq_len(total), function(i) {
+      })
       
-      message(sprintf("\nDownloading track %d of %d!", i, total))
+      # }, 
+      # args = list(
+      #   drow = dep_row, tag_ids = tag_ids, 
+      #   movebank_acc = acc, movebank_pw = pw)) 
+    
+    gc(verbose = F)
       
-      row_i <- rows_to_download[i]
-      
-      process_by_row(
-        account = deploy_info[row_i, account],
-        study_id = deploy_info[row_i, study_id],
-        individual_id = deploy_info[row_i, individual_id],
-        deployment_id = deploy_info[row_i, deployment_id],
-        file_path = deploy_info[row_i, file_path],
-        index = row_i
-      )
-      
-    }), 
-    fill = T
-  )
-  
-  out_report <- merge(
-    deploy_info, download_report, by = "row_id", all.x = TRUE
-  )
-  out_report[
-    , downloaded_on := if("downloaded_on" %in% names(out_report))
-      fifelse(downloaded_before == T, file.mtime(file_path), downloaded_on)
-    else fifelse(downloaded_before == T, file.mtime(file_path), NA)
-  ][, row_id := NULL]
-  
-  rm(download_report)
-  
-  return(out_report)
-  
+   } # closer FOR
+
+  message("Downloading completed!")
+  invisible(NULL)
+
 }
+
+
+# FUNCTION: Parallel download_individual_deployments -----------------------------------
+
+# download_individual_deployments <- function(
+#     deploy_info,
+#     tag_ids = c("gps", "sigfox-geolocation"),
+#     studies_dir = here::here("Data", "Studies"),
+#     species_col = "birdlife_name",
+#     sub_dir = NULL, 
+#     batch_cores = parallel::detectCores() - 2,
+#     timeout_sec = 300
+# ) {
+#   library(parallel)
+#   library(data.table)
+#   library(keyring)
+#   
+#   col_check <- c("account", "study_id", "individual_id", "deployment_id")
+#   if (!all(c(col_check, species_col) %in% names(deploy_info))) {
+#     stop("The input data.table must contain: ",
+#          paste(col_check, collapse = ", "),
+#          " and the correct column with species names.")
+#   }
+#   
+#   # Validate tag_ids
+#   tag_external_id <- c(
+#     "bird-ring", "gps", "radio-transmitter", "argos-doppler-shift",
+#     "natural-mark", "acceleration", "solar-geolocator", "accessory-measurements",
+#     "solar-geolocator-raw", "barometer", "magnetometer", "orientation",
+#     "solar-geolocator-twilight", "acoustic-telemetry", "gyroscope", "heart-rate",
+#     "sigfox-geolocation", "proximity", "geolocation-api", "gnss",
+#     "derived", "tdr", "atlas-geolocation"
+#   )
+#   tag_numb <- c(397, 653, 673, 82798, 2365682, 2365683, 3886361, 7842954, 9301403,
+#                 77740391, 77740402, 819073350, 914097241, 1239574236, 1297673380,
+#                 2206221896, 2299894820, 2645090675, 3090218812, 3090218818, 3090218819,
+#                 4264744764, 4342918458)
+#   if(any(!tag_ids %in% c(tag_external_id, tag_numb))){
+#     stop(
+#       "The 'tags_ids' parameter must be a character or numeric vector with 
+#       the correct tag exernal_id or id. Check Movebank specification")
+#   }
+#   
+#   depinf <- copy(deploy_info)
+#   depinf[, file := paste0(
+#     study_id,  "_stu_", individual_id, "_ind_", deployment_id, "_dep", ".rds")]
+#   depinf[
+#     , fout := if(is.null(sub_dir)) file.path(
+#       studies_dir, gsub(" ", "_", get(species_col)), file) else file.path(
+#         studies_dir, gsub(" ", "_", get(species_col)), sub_dir, file)]
+#   depinf[, downloaded_before := file.exists(fout) | 
+#            file.exists(gsub(".rds", "_error.rds", fout))]
+#   depinf[, file := NULL]
+#   depinf <- depinf[downloaded_before == FALSE]
+#   total <- nrow(depinf)
+#   if(total == 0){
+#     message("All deployments already downloaded.")
+#     return(invisible(NULL))
+#   }
+#   
+#   # Helper: worker for mcparallel
+#   process_by_row <- function(drow, tag_ids) {
+#     
+#     file_path <- drow$fout
+#     acc <- drow$account
+#     
+#     drow <- as.data.table(drow)
+#     
+#     tryCatch({
+#       
+#       # Get password from keyring for this account
+#       pw <- key_get(service = acc, 
+#         username = key_list()$username[which(key_list()$service == acc)])
+#       
+#       options(move2_movebank_user = acc)
+#       options(move2_movebank_password = pw)
+#       
+#       track <- R.utils::withTimeout(
+#         movebank_download_study(
+#           study_id = drow$study_id,
+#           individual_id = drow$individual_id,
+#           deployment_id = drow$deployment_id,
+#           sensor_type_id = tag_ids,
+#           remove_movebank_outliers = TRUE,
+#           omit_derived_data = TRUE,
+#           convert_spatial_columns = TRUE,
+#           attributes = "all"
+#         ) |> dplyr::select(where(~!all(is.na(.)))),
+#         timeout = timeout_sec,
+#         onTimeout = "error"
+#       )
+#       
+#       if (nrow(track) > 0) {
+#         saveRDS(track, file_path, compress = FALSE)
+#         rm(track)
+#         
+#       } else {
+#         
+#         drow$error <- "no data for the deployment"
+#         saveRDS(drow, gsub(".rds", "_error.rds", file_path), compress = FALSE)
+#       }
+#     }, error = function(e) {
+#       drow$error <- e$message
+#       saveRDS(drow, gsub(".rds", "_error.rds", file_path), compress = FALSE)
+#     })
+#     rm(drow)
+#     gc(verbose = FALSE)
+#     return(invisible(NULL))
+#   }
+#   
+#   # Split into batches
+#   n <- nrow(depinf)
+#   batches <- split(seq_len(n), ceiling(seq_len(n) / batch_cores))
+#   total_batches <- length(batches)
+#   
+#   for (batch_i in seq_along(batches)) {
+#     
+#     dep_rows <- batches[[batch_i]]
+#     batch_rows <- depinf[dep_rows]
+#     
+#     dep_count <- nrow(batch_rows)
+#     
+#     message(sprintf(
+#       "Batch %d of %d with %d deployments - download started!",
+#       batch_i, total_batches, dep_count))
+#     
+#     jobs <- lapply(seq_len(dep_count), function(j) {
+#       dep_job <- as.list(batch_rows[j])
+#       mcparallel(process_by_row(dep_job, tag_ids), silent = TRUE)
+#     })
+#     
+#     mccollect(jobs, wait = TRUE, timeout = timeout_sec + 60)
+#     gc()
+#   }
+#   
+#   message("Downloading completed!")
+#   invisible(NULL)
+#   
+# }
