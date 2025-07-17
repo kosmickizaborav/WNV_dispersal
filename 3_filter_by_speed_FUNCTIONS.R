@@ -1,5 +1,5 @@
 #' ---
-#' title: "function used to filter by speed datatable"
+#' title: "function used to filter by speed"
 #' output: github_document
 #' ---
 
@@ -29,25 +29,25 @@
 # FUNCTION: get_speed_limit ---------------------------------------------
 
 get_speed_limit <- function(
-    species, sex = NULL, summary_func = mean, wind_speed = 0, 
+    species, summary_func = mean, wind_speed = 0, 
     family = NULL, order = NULL,
     birdspeed_file = here::here(
       "Published_data", "00_bird_wing_data_speed_mean.csv")
+    # sex = NULL
     ) {
   
-  s <- ifelse(is.null(sex), c(NA, ""), sex)
+  #s <- ifelse(is.null(sex), c(NA, ""), sex)
   
   # Load bird_speeds data
   bird_speeds <- fread(birdspeed_file)[
-    , speed := start_min_speed
-    ][ , genus := tstrsplit(scientific_name, " ", fixed = TRUE)[[1]]
-    ][ , .(scientific_name, sex, genus, family, order, speed) ]
+    , genus := tstrsplit(scientific_name, " ", fixed = TRUE)[[1]]
+    ][ , .(scientific_name, genus, family, order, speed) ] # sex
   
   # Check if species exists in bird_speeds
   if (species %in% bird_speeds$scientific_name) {
     
     speed_sp <- bird_speeds[scientific_name == species]
-    speed_sp <- speed_sp[if(s %in% sex) sex %in% s else sex %in% c(NA, "")]
+    #speed_sp <- speed_sp[if(s %in% sex) sex %in% s else sex %in% c(NA, "")]
     
     return(speed_sp[, speed] + wind_speed)
    
@@ -63,7 +63,7 @@ get_speed_limit <- function(
   
   # if there is no species that matches take average for the genus,
   # excluding sex differences
-  bird_speeds <- bird_speeds[sex %in% c(NA, "")]
+  # bird_speeds <- bird_speeds[sex %in% c(NA, "")]
   
   # helper function to match and compute speed for different phylogeny levels
   match_phylo_and_compute <- function(level) {
@@ -163,16 +163,20 @@ plot_speed_turns <- function(
 # FUNCTION: get_speed -----------------------------------------------------
 
 
-get_speeds <- function(track, lonlat = T, units = "secs"){
+get_speeds <- function(track, t_col = t_col, units = "secs"){
   
-  n_ <- nrow(track)
+  n <- nrow(track)
   
-  speed <- data.table(
-    step_lengths = step_lengths(track, lonlat = lonlat, append_last = F), 
-    dt_ = difftime(track$t_[-1], track$t_[-n_], units = "secs")
-  )[, speed := step_lengths/as.numeric(dt_, unit = "secs")][, speed]
+  # checked that they give the same results as step_lengths from amt
+  sls <- sf::st_distance(
+    track$geometry[-n], track$geometry[-1], by_element = TRUE)
   
-  return(c(speed, NA))
+  ttime <- track[, get(t_col)]
+  dtime <- difftime(ttime[-1], ttime[-n], units = "secs")
+  
+  speed <- as.numeric(sls) / as.numeric(dtime, unit = units)
+  
+  return(c(NA, speed))
   
 }
 
@@ -184,28 +188,34 @@ get_speeds <- function(track, lonlat = T, units = "secs"){
 # the speed limit
 
 filter_speed_limit <- function(
-    track, speed_limit = NULL, lonlat = T, units = "secs"){
+    track, coords = c("x", "y"), t_col = "timestamp", 
+    speed_limit = NULL, crs = NULL, units = "secs"){
   
   if(is.null(speed_limit)) {
     stop("Speed limit is NULL. Please provide a speed limit.")
   }
   
-  speeds <- get_speeds(track, lonlat = lonlat, units = units)
-  to_exclude <- which(speeds > speed_limit)
+  track <- track[
+    , geometry := sf::st_as_sf(.SD, coords = coords, crs = crs), 
+    .SDcols = coords]
   
-  while(length(to_exclude) > 0) {
+  repeat{
+    # Calculate speeds (custom function, returns vector)
+    speeds <- get_speeds(track, t_col = t_col, units = units)
     
-    track <- track |> 
-      mutate(row_id = 1:nrow(track)) |> 
-      filter(!row_id %in% to_exclude)
-    
-    speeds <- get_speeds(track, lonlat = lonlat, units = units)
-    
+    # Find indexes to exclude (either leading or trailing point per segment)
     to_exclude <- which(speeds > speed_limit)
+    
+    if (length(to_exclude) == 0) break
+   
+    track <- track[!seq_len(.N) %in% to_exclude]
     
   }
   
-  track <- track |> select(-any_of("row_id"))
+  track <- track[, geometry := NULL]
   
   return(track)
 }
+
+
+

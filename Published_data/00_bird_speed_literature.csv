@@ -1,305 +1,305 @@
-scientific_name,family,order,speed,sd,n_tracks,source,V_mp,V_mr,flight_type,soaring_birds
-Cygnus olor,Anatidae,Anseriformes,16.2,1.6,24,Alerstam2007,NA,NA,NA,NA
-Cygnus columbianus,Anatidae,Anseriformes,18.5,NA,1,Alerstam2007,NA,NA,NA,NA
-Cygnus cygnus,Anatidae,Anseriformes,17.3,2,10,Alerstam2007,NA,NA,NA,NA
-Anser fabalis,Anatidae,Anseriformes,17.3,2.7,44,Alerstam2007,NA,NA,NA,NA
-Anser albifrons,Anatidae,Anseriformes,16.1,2,5,Alerstam2007,NA,NA,NA,NA
-Anser anser,Anatidae,Anseriformes,17.1,2.6,21,Alerstam2007,NA,NA,NA,NA
-Branta canadensis,Anatidae,Anseriformes,16.7,NA,1,Alerstam2007,NA,NA,NA,NA
-Branta leucopsis,Anatidae,Anseriformes,17,2.2,22,Alerstam2007,NA,NA,NA,NA
-Branta bernicla,Anatidae,Anseriformes,17.7,2.8,97,Alerstam2007,NA,NA,NA,NA
-Tadorna tadorna,Anatidae,Anseriformes,15.4,NA,1,Alerstam2007,NA,NA,NA,NA
-Mareca penelope,Anatidae,Anseriformes,20.6,2.1,36,Alerstam2007,NA,NA,NA,NA
-Anas crecca,Anatidae,Anseriformes,19.7,4,9,Alerstam2007,NA,NA,NA,NA
-Anas platyrhynchos,Anatidae,Anseriformes,18.5,2.3,22,Alerstam2007,NA,NA,NA,NA
-Anas acuta,Anatidae,Anseriformes,20.6,2.6,6,Alerstam2007,NA,NA,NA,NA
-Aythya ferina,Anatidae,Anseriformes,23.6,NA,1,Alerstam2007,NA,NA,NA,NA
-Aythya fuligula,Anatidae,Anseriformes,21.1,1.1,3,Alerstam2007,NA,NA,NA,NA
-Aythya marila,Anatidae,Anseriformes,21.3,NA,1,Alerstam2007,NA,NA,NA,NA
-Somateria mollissima,Anatidae,Anseriformes,17.9,2.4,240,Alerstam2007,NA,NA,NA,NA
-Somateria spectabilis,Anatidae,Anseriformes,16,0.3,2,Alerstam2007,NA,NA,NA,NA
-Polysticta stelleri,Anatidae,Anseriformes,21.9,NA,1,Alerstam2007,NA,NA,NA,NA
-Clangula hyemalis,Anatidae,Anseriformes,22,1.4,3,Alerstam2007,NA,NA,NA,NA
-Melanitta nigra,Anatidae,Anseriformes,22.1,4,14,Alerstam2007,NA,NA,NA,NA
-Melanitta fusca,Anatidae,Anseriformes,20.1,4.7,32,Alerstam2007,NA,NA,NA,NA
-Bucephala clangula,Anatidae,Anseriformes,20.3,3.8,10,Alerstam2007,NA,NA,NA,NA
-Mergus serrator,Anatidae,Anseriformes,20,2.9,33,Alerstam2007,NA,NA,NA,NA
-Mergus merganser,Anatidae,Anseriformes,19.7,1.1,2,Alerstam2007,NA,NA,NA,NA
-Columba oenas,Columbidae,Columbiformes,15.8,2,8,Alerstam2007,NA,NA,NA,NA
-Columba palumbus,Columbidae,Columbiformes,16.3,2.3,87,Alerstam2007,NA,NA,NA,NA
-Apus apus,Apodidae,Caprimulgiformes,9.7,2,34,Alerstam2007,NA,NA,NA,NA
-Haematopus ostralegus,Haematopodidae,Charadriiformes,13,2.5,19,Alerstam2007,NA,NA,NA,NA
-Charadrius hiaticula,Charadriidae,Charadriiformes,19.5,NA,1,Alerstam2007,NA,NA,NA,NA
-Pluvialis dominica,Charadriidae,Charadriiformes,13.7,NA,1,Alerstam2007,NA,NA,NA,NA
-Pluvialis squatarola,Charadriidae,Charadriiformes,17.9,3.9,14,Alerstam2007,NA,NA,NA,NA
-Vanellus vanellus,Charadriidae,Charadriiformes,12.8,1.3,14,Alerstam2007,NA,NA,NA,NA
-Calidris canutus,Scolopacidae,Charadriiformes,20.1,1.9,7,Alerstam2007,NA,NA,NA,NA
-Calidris alpina,Scolopacidae,Charadriiformes,15.3,1.9,36,Alerstam2007,NA,NA,NA,NA
-Calidris pugnax,Scolopacidae,Charadriiformes,17.4,1,3,Alerstam2007,NA,NA,NA,NA
-Gallinago gallinago,Scolopacidae,Charadriiformes,17.1,2.7,22,Alerstam2007,NA,NA,NA,NA
-Limosa lapponica,Scolopacidae,Charadriiformes,18.3,2.1,15,Alerstam2007,NA,NA,NA,NA
-Numenius phaeopus,Scolopacidae,Charadriiformes,16.3,0.9,4,Alerstam2007,NA,NA,NA,NA
-Numenius arquata,Scolopacidae,Charadriiformes,16.3,2.3,16,Alerstam2007,NA,NA,NA,NA
-Tringa nebularia,Scolopacidae,Charadriiformes,12.3,3.3,5,Alerstam2007,NA,NA,NA,NA
-Tringa glareola,Scolopacidae,Charadriiformes,9.6,1.7,3,Alerstam2007,NA,NA,NA,NA
-Arenaria interpres,Scolopacidae,Charadriiformes,14.9,0.7,2,Alerstam2007,NA,NA,NA,NA
-Phalaropus lobatus,Scolopacidae,Charadriiformes,13.1,NA,1,Alerstam2007,NA,NA,NA,NA
-Phalaropus fulicarius,Scolopacidae,Charadriiformes,12.4,2.3,6,Alerstam2007,NA,NA,NA,NA
-Stercorarius pomarinus,Stercorariidae,Charadriiformes,15.2,2.3,16,Alerstam2007,NA,NA,NA,NA
-Stercorarius parasiticus,Stercorariidae,Charadriiformes,13.8,2.2,7,Alerstam2007,NA,NA,NA,NA
-Stercorarius longicaudus,Stercorariidae,Charadriiformes,13.6,1.9,3,Alerstam2007,NA,NA,NA,NA
-Hydrocoloeus minutus,Laridae,Charadriiformes,11.5,0.1,2,Alerstam2007,NA,NA,NA,NA
-Larus ridibundus,Laridae,Charadriiformes,11.9,1.6,19,Alerstam2007,NA,NA,NA,NA
-Larus canus,Laridae,Charadriiformes,13.4,2.9,36,Alerstam2007,NA,NA,NA,NA
-Larus fuscus,Laridae,Charadriiformes,13.1,1.9,11,Alerstam2007,NA,NA,NA,NA
-Larus argentatus,Laridae,Charadriiformes,12.8,1.8,18,Alerstam2007,NA,NA,NA,NA
-Larus glaucoides,Laridae,Charadriiformes,15.9,NA,1,Alerstam2007,NA,NA,NA,NA
-Larus hyperboreus,Laridae,Charadriiformes,13.4,0.8,3,Alerstam2007,NA,NA,NA,NA
-Larus marinus,Laridae,Charadriiformes,13.7,1.2,4,Alerstam2007,NA,NA,NA,NA
-Rissa tridactyla,Laridae,Charadriiformes,13.1,0.4,2,Alerstam2007,NA,NA,NA,NA
-Hydroprogne caspia,Laridae,Charadriiformes,12.1,NA,1,Alerstam2007,NA,NA,NA,NA
-Sterna paradisaea,Laridae,Charadriiformes,10.9,0.9,2,Alerstam2007,NA,NA,NA,NA
-Gavia stellata,Gaviidae,Gaviiformes,18.6,3.9,7,Alerstam2007,NA,NA,NA,NA
-Gavia arctica,Gaviidae,Gaviiformes,19.3,2.1,13,Alerstam2007,NA,NA,NA,NA
-Gavia adamsii,Gaviidae,Gaviiformes,18.7,0.5,2,Alerstam2007,NA,NA,NA,NA
-Phalacrocorax carbo,Phalacrocoracidae,Suliformes,15.2,3,35,Alerstam2007,NA,NA,NA,NA
-Botaurus stellaris,Ardeidae,Pelecaniformes,8.8,NA,1,Alerstam2007,NA,NA,NA,NA
-Ardea cinerea,Ardeidae,Pelecaniformes,12.5,2.2,14,Alerstam2007,NA,NA,NA,NA
-Porzana porzana,Rallidae,Gruiformes,13.9,NA,1,Alerstam2007,NA,NA,NA,NA
-Grus grus,Gruidae,Gruiformes,15,2.7,12,Alerstam2007,NA,NA,NA,NA
-Falco tinnunculus,Falconidae,Falconiformes,10.1,NA,1,Alerstam2007,NA,NA,NA,NA
-Alauda arvensis,Alaudidae,Passeriformes,15.1,2.1,15,Alerstam2007,NA,NA,NA,NA
-Riparia riparia,Hirundinidae,Passeriformes,14.3,NA,1,Alerstam2007,NA,NA,NA,NA
-Hirundo rustica,Hirundinidae,Passeriformes,10,2,2,Alerstam2007,NA,NA,NA,NA
-Delichon urbicum,Hirundinidae,Passeriformes,9.7,0.5,2,Alerstam2007,NA,NA,NA,NA
-Anthus trivialis,Motacillidae,Passeriformes,12.7,2.2,4,Alerstam2007,NA,NA,NA,NA
-Motacilla alba,Motacillidae,Passeriformes,14.1,1.9,5,Alerstam2007,NA,NA,NA,NA
-Turdus pilaris,Turdidae,Passeriformes,13,2.9,15,Alerstam2007,NA,NA,NA,NA
-Turdus philomelos,Turdidae,Passeriformes,11,2.1,6,Alerstam2007,NA,NA,NA,NA
-Turdus iliacus,Turdidae,Passeriformes,13.8,1.8,6,Alerstam2007,NA,NA,NA,NA
-Turdus viscivorus,Turdidae,Passeriformes,11.9,3.3,3,Alerstam2007,NA,NA,NA,NA
-Periparus ater,Paridae,Passeriformes,10.6,2.3,2,Alerstam2007,NA,NA,NA,NA
-Garrulus glandarius,Corvidae,Passeriformes,6.7,1,2,Alerstam2007,NA,NA,NA,NA
-Nucifraga caryocatactes,Corvidae,Passeriformes,13.4,2.8,2,Alerstam2007,NA,NA,NA,NA
-Corvus monedula,Corvidae,Passeriformes,12.5,2.6,13,Alerstam2007,NA,NA,NA,NA
-Corvus frugilegus,Corvidae,Passeriformes,11.5,1.2,16,Alerstam2007,NA,NA,NA,NA
-Corvus corone,Corvidae,Passeriformes,13.5,2.6,5,Alerstam2007,NA,NA,NA,NA
-Corvus corax,Corvidae,Passeriformes,14.3,0.9,5,Alerstam2007,NA,NA,NA,NA
-Sturnus vulgaris,Sturnidae,Passeriformes,16.2,4.3,4,Alerstam2007,NA,NA,NA,NA
-Fringilla coelebs,Fringillidae,Passeriformes,12.8,1.9,23,Alerstam2007,NA,NA,NA,NA
-Fringilla montifringilla,Fringillidae,Passeriformes,15,2.9,4,Alerstam2007,NA,NA,NA,NA
-Spinus spinus,Fringillidae,Passeriformes,14.5,1.6,60,Alerstam2007,NA,NA,NA,NA
-Linaria cannabina,Fringillidae,Passeriformes,14.8,4.5,2,Alerstam2007,NA,NA,NA,NA
-Pyrrhula pyrrhula,Fringillidae,Passeriformes,13.4,NA,1,Alerstam2007,NA,NA,NA,NA
-Pernis apivorus,Accipitridae,Accipitriformes,12.5,2.3,13,Alerstam2007,NA,NA,NA,NA
-Milvus milvus,Accipitridae,Accipitriformes,12,0.3,2,Alerstam2007,NA,NA,NA,NA
-Haliaeetus albicilla,Accipitridae,Accipitriformes,13.6,0.9,2,Alerstam2007,NA,NA,NA,NA
-Circus aeruginosus,Accipitridae,Accipitriformes,11.2,1.6,2,Alerstam2007,NA,NA,NA,NA
-Circus cyaneus,Accipitridae,Accipitriformes,9.1,0.7,2,Alerstam2007,NA,NA,NA,NA
-Accipiter nisus,Accipitridae,Accipitriformes,11.3,1.9,12,Alerstam2007,NA,NA,NA,NA
-Buteo buteo,Accipitridae,Accipitriformes,11.6,2.7,10,Alerstam2007,NA,NA,NA,NA
-Buteo lagopus,Accipitridae,Accipitriformes,10.5,0,2,Alerstam2007,NA,NA,NA,NA
-Aquila chrysaetos,Accipitridae,Accipitriformes,11.9,NA,1,Alerstam2007,NA,NA,NA,NA
-Pandion haliaetus,Pandionidae,Accipitriformes,13.3,2.7,5,Alerstam2007,NA,NA,NA,NA
-Accipiter brevipes,Accipitridae,Accipitriformes,10.8,2.3,18,Bruderer2001,7.3,12.3,NA,NA
-Accipiter brevipes,Accipitridae,Accipitriformes,13.3,2.3,44,Bruderer2001,NA,13.3,gliding,1
-Accipiter brevipes,Accipitridae,Accipitriformes,11.1,2.1,57,Bruderer2001,NA,7.3,flapping,1
-Accipiter brevipes,Accipitridae,Accipitriformes,11.4,2.4,91,Bruderer2001,NA,7.3,mixed,1
-Accipiter gentilis,Accipitridae,Accipitriformes,9.7,0,1,Bruderer2001,NA,9.1,mixed,1
-Accipiter nisus,Accipitridae,Accipitriformes,9.8,1.3,47,Bruderer2001,7.4,12.9,NA,NA
-Accipiter nisus,Accipitridae,Accipitriformes,10.9,1.3,65,Bruderer2001,NA,13,gliding,1
-Accipiter nisus,Accipitridae,Accipitriformes,10,1.8,64,Bruderer2001,NA,7.4,flapping,1
-Accipiter nisus,Accipitridae,Accipitriformes,11.5,2.2,25,Bruderer2001,NA,7.4,mixed,1
-Acrocephalus palustris,Acrocephalidae,Passeriformes,8.8,0.8,2,Bruderer2001,5.2,9.7,NA,NA
-Acrocephalus scirpaceus,Acrocephalidae,Passeriformes,6.6,2.8,11,Bruderer2001,5.2,9.7,NA,NA
-Acrocephalus arundinaceus,Acrocephalidae,Passeriformes,7.1,0,1,Bruderer2001,6.1,10.9,NA,NA
-Actitis hypoleucos,Scolopacidae,Charadriiformes,9.1,3.6,2,Bruderer2001,6.1,10.6,NA,NA
-Aegypius monachus,Accipitridae,Accipitriformes,15.5,0,1,Bruderer2001,NA,14.2,mixed,1
-Alauda arvensis,Alaudidae,Passeriformes,12.7,2.5,20,Bruderer2001,5.7,10.5,NA,NA
-Alectoris chukar,Phasianidae,Galliformes,14.2,0,1,Bruderer2001,12.2,22,NA,NA
-Anas acuta,Anatidae,Anseriformes,13.3,0.9,2,Bruderer2001,11,17.7,NA,NA
-Anas platyrhynchos,Anatidae,Anseriformes,21.4,2.4,7,Bruderer2001,11.9,19.1,NA,NA
-Spatula querquedula,Anatidae,Anseriformes,14.1,0,1,Bruderer2001,9.5,15.9,NA,NA
-Anthus pratensis,Motacillidae,Passeriformes,10.5,2.7,6,Bruderer2001,5.3,10,NA,NA
-Anthus pratensis,Motacillidae,Passeriformes,8.8,0.7,4,Bruderer2001,5.3,10,NA,NA
-Anthus trivialis,Motacillidae,Passeriformes,12,4.8,4,Bruderer2001,5.5,10.2,NA,NA
-Anthus trivialis,Motacillidae,Passeriformes,7,1.4,8,Bruderer2001,5.5,10.2,NA,NA
-Apus apus,Apodidae,Caprimulgiformes,10.6,3,163,Bruderer2001,5.2,8.6,NA,NA
-Apus apus,Apodidae,Caprimulgiformes,9.2,0.2,2,Bruderer2001,5.2,8.6,NA,NA
-Tachymarptis melba,Apodidae,Caprimulgiformes,12.6,2.9,36,Bruderer2001,6.2,10.1,NA,NA
-Apus pallidus,Apodidae,Caprimulgiformes,10.5,1.9,33,Bruderer2001,5.2,9.1,NA,NA
-Aquila chrysaetos,Accipitridae,Accipitriformes,15.1,1.7,2,Bruderer2001,NA,10.5,gliding,1
-Aquila chrysaetos,Accipitridae,Accipitriformes,13,6.2,7,Bruderer2001,NA,12.6,flapping,1
-Aquila heliaca,Accipitridae,Accipitriformes,9.5,0.9,1,Bruderer2001,11.6,18.6,NA,NA
-Aquila heliaca,Accipitridae,Accipitriformes,9.5,0.9,1,Bruderer2001,NA,11.6,mixed,1
-Aquila nipalensis,Accipitridae,Accipitriformes,7.7,1,1,Bruderer2001,NA,11.3,flapping,1
-Aquila nipalensis,Accipitridae,Accipitriformes,14.3,2.5,101,Bruderer2001,NA,19.5,gliding,1
-Aquila nipalensis,Accipitridae,Accipitriformes,15.3,2,9,Bruderer2001,NA,11.3,mixed,1
-Clanga pomarina,Accipitridae,Accipitriformes,11.7,3,2,Bruderer2001,NA,9.8,flapping,1
-Clanga pomarina,Accipitridae,Accipitriformes,14.5,2.7,67,Bruderer2001,NA,16.2,gliding,1
-Clanga pomarina,Accipitridae,Accipitriformes,14.7,2,9,Bruderer2001,NA,9.8,mixed,1
-Ardea cinerea,Ardeidae,Pelecaniformes,11.2,1.6,49,Bruderer2001,9.4,15.2,NA,NA
-Ardea purpurea,Ardeidae,Pelecaniformes,10.8,2,12,Bruderer2001,9.1,15,NA,NA
-Ardeola ralloides,Ardeidae,Pelecaniformes,11.7,0,1,Bruderer2001,7.3,12.3,NA,NA
-Asio flammeus,Strigidae,Strigiformes,8.4,1.4,3,Bruderer2001,7.1,11.9,NA,NA
-Buteo buteo,Accipitridae,Accipitriformes,11.5,1.4,93,Bruderer2001,NA,16.4,gliding,1
-Buteo buteo,Accipitridae,Accipitriformes,13.3,1.3,13,Bruderer2001,NA,8,flapping,1
-Buteo buteo,Accipitridae,Accipitriformes,9.6,1.7,57,Bruderer2001,9.8,16.5,NA,NA
-Buteo buteo,Accipitridae,Accipitriformes,9.6,1.7,NA,Bruderer2001,NA,9.8,flapping,1
-Buteo buteo,Accipitridae,Accipitriformes,11.1,0,1,Bruderer2001,8,13.4,NA,NA
-Buteo buteo,Accipitridae,Accipitriformes,11,3.4,23,Bruderer2001,NA,9.8,mixed,1
-Buteo buteo,Accipitridae,Accipitriformes,14.4,2.4,324,Bruderer2001,NA,14.9,gliding,1
-Buteo buteo,Accipitridae,Accipitriformes,14.4,2.4,51,Bruderer2001,NA,8,mixed,1
-Buteo rufinus,Accipitridae,Accipitriformes,14.6,2.8,11,Bruderer2001,NA,16.7,gliding,1
-Buteo rufinus,Accipitridae,Accipitriformes,14.8,2.4,17,Bruderer2001,NA,9.8,mixed,1
-Calidris alpina,Scolopacidae,Charadriiformes,8.9,1.6,2,Bruderer2001,5.7,9.3,NA,NA
-Linaria cannabina,Fringillidae,Passeriformes,15.7,0,1,Bruderer2001,5.4,10,NA,NA
-Carduelis carduelis,Fringillidae,Passeriformes,12.8,3,3,Bruderer2001,5.3,9.7,NA,NA
-Chloris chloris,Fringillidae,Passeriformes,12.2,0,1,Bruderer2001,5.9,10.6,NA,NA
-Acanthis flammea,Fringillidae,Passeriformes,8.4,0,1,Bruderer2001,4.7,9,NA,NA
-Spinus spinus,Fringillidae,Passeriformes,12.4,0.9,2,Bruderer2001,5.1,9.4,NA,NA
-Spinus spinus,Fringillidae,Passeriformes,6.7,1,2,Bruderer2001,5.1,9.4,NA,NA
-Caprimulgus ruficollis,Caprimulgidae,Caprimulgiformes,8.9,0,1,Bruderer2001,5,8.8,NA,NA
-Charadrius hiaticula,Charadriidae,Charadriiformes,10.6,0,1,Bruderer2001,5.5,8.9,NA,NA
-Chlidonias leucopterus,Laridae,Charadriiformes,12,0,1,Bruderer2001,5.1,8.8,NA,NA
-Ciconia ciconia,Ciconiidae,Ciconiiformes,13.9,2.9,26,Bruderer2001,NA,12.9,flapping,1
-Ciconia ciconia,Ciconiidae,Ciconiiformes,13.5,2.5,109,Bruderer2001,NA,12.9,mixed,1
-Ciconia ciconia,Ciconiidae,Ciconiiformes,9.1,1.2,3,Bruderer2001,12.9,23,NA,NA
-Ciconia nigra,Ciconiidae,Ciconiiformes,16,1.8,6,Bruderer2001,NA,13.2,flapping,1
-Ciconia nigra,Ciconiidae,Ciconiiformes,15.4,2.2,21,Bruderer2001,NA,13.2,mixed,1
-Circus aeruginosus,Accipitridae,Accipitriformes,12.6,2,50,Bruderer2001,NA,15,gliding,1
-Circus aeruginosus,Accipitridae,Accipitriformes,10.1,2,22,Bruderer2001,NA,8,flapping,1
-Circus aeruginosus,Accipitridae,Accipitriformes,9.7,1.1,15,Bruderer2001,8,13.5,NA,NA
-Circus aeruginosus,Accipitridae,Accipitriformes,11.6,2.1,4,Bruderer2001,NA,8,mixed,1
-Circus cyaneus,Accipitridae,Accipitriformes,11.7,1.5,3,Bruderer2001,NA,14.6,gliding,1
-Circus cyaneus,Accipitridae,Accipitriformes,11.4,1.1,3,Bruderer2001,NA,7.4,mixed,1
-Circus macrourus,Accipitridae,Accipitriformes,9.6,1,3,Bruderer2001,NA,7.2,flapping,1
-Circus macrourus,Accipitridae,Accipitriformes,13.2,4,5,Bruderer2001,NA,14.3,gliding,1
-Circus macrourus,Accipitridae,Accipitriformes,12.9,1.1,7,Bruderer2001,NA,7.2,mixed,1
-Circus macrourus,Accipitridae,Accipitriformes,8.5,0,1,Bruderer2001,7.2,12,NA,NA
-Circus pygargus,Accipitridae,Accipitriformes,8.4,0.5,1,Bruderer2001,NA,6.4,flapping,1
-Circus pygargus,Accipitridae,Accipitriformes,12.4,1.9,10,Bruderer2001,NA,13.9,gliding,1
-Circus pygargus,Accipitridae,Accipitriformes,10.7,2.1,23,Bruderer2001,NA,6.4,mixed,1
-Circaetus gallicus,Accipitridae,Accipitriformes,13.6,2.2,34,Bruderer2001,NA,17.9,gliding,1
-Circaetus gallicus,Accipitridae,Accipitriformes,13.4,2.3,31,Bruderer2001,NA,9.5,mixed,1
-Columba palumbus,Columbidae,Columbiformes,17.6,3.2,11,Bruderer2001,9.4,15.6,NA,NA
-Columba livia,Columbidae,Columbiformes,17.5,2,39,Bruderer2001,8.9,14.7,NA,NA
-Corvus corax,Corvidae,Passeriformes,14.1,3.2,6,Bruderer2001,9.9,16.4,NA,NA
-Corvus corone,Corvidae,Passeriformes,9.9,2,50,Bruderer2001,9,15.4,NA,NA
-Corvus frugilegus,Corvidae,Passeriformes,13,1.4,8,Bruderer2001,8.4,14.5,NA,NA
-Corvus monedula,Corvidae,Passeriformes,14.7,1.7,3,Bruderer2001,7.4,12.8,NA,NA
-Corvus ruficollis,Corvidae,Passeriformes,14.3,2.2,25,Bruderer2001,8.8,14.9,NA,NA
-Cursorius cursor,Glareolidae,Charadriiformes,15.1,2.8,4,Bruderer2001,6.6,11.1,NA,NA
-Cuculus canorus,Cuculidae,Cuculiformes,10.4,0,1,Bruderer2001,6.5,11.1,NA,NA
-Ardea alba,Ardeidae,Pelecaniformes,10.2,1.1,2,Bruderer2001,8.6,13.6,NA,NA
-Elanus caeruleus,Elanidae,Accipitriformes,15.3,0,1,Bruderer2001,6.5,11,NA,NA
-Emberiza hortulana,Emberizidae,Passeriformes,7.7,0,1,Bruderer2001,5.6,10.5,NA,NA
-Erithacus rubecula,Muscicapidae,Passeriformes,7.5,1.7,5,Bruderer2001,5.6,10.6,NA,NA
-Falco biarmicus,Falconidae,Falconiformes,11.1,2.7,3,Bruderer2001,9.2,15.2,NA,NA
-Falco concolor,Falconidae,Falconiformes,15.2,1.9,5,Bruderer2001,6.5,10.8,NA,NA
-Falco eleonorae,Falconidae,Falconiformes,12.8,2.3,2,Bruderer2001,6.7,10,NA,NA
-Falco naumanni,Falconidae,Falconiformes,11.3,2.8,12,Bruderer2001,6.6,11.2,NA,NA
-Falco peregrinus,Falconidae,Falconiformes,12.1,3.5,13,Bruderer2001,9.7,15.8,NA,NA
-Falco peregrinus,Falconidae,Falconiformes,14.4,0.1,2,Bruderer2001,8.8,14.4,NA,NA
-Falco subbuteo,Falconidae,Falconiformes,11.3,2.2,20,Bruderer2001,6.5,10.8,NA,NA
-Falco tinnunculus,Falconidae,Falconiformes,7.6,0,1,Bruderer2001,6.9,11.3,NA,NA
-Falco tinnunculus,Falconidae,Falconiformes,12.3,2.5,152,Bruderer2001,6.9,11.3,NA,NA
-Falco vespertinus,Falconidae,Falconiformes,12.8,1,4,Bruderer2001,6.5,10.9,NA,NA
-Fringilla coelebs,Fringillidae,Passeriformes,12.8,2.4,52,Bruderer2001,5.3,10,NA,NA
-Fringilla montifringilla,Fringillidae,Passeriformes,11.6,0.2,2,Bruderer2001,5.5,10.3,NA,NA
-Ficedula hypoleuca,Muscicapidae,Passeriformes,9.5,1.8,21,Bruderer2001,4.8,9.1,NA,NA
-Gallinago gallinago,Scolopacidae,Charadriiformes,15.5,0,1,Bruderer2001,7.1,11.7,NA,NA
-Garrulus glandarius,Corvidae,Passeriformes,12.9,3.8,2,Bruderer2001,7.6,13.6,NA,NA
-Glareola pratincola,Glareolidae,Charadriiformes,12.1,1.6,8,Bruderer2001,5.4,9.4,NA,NA
-Glareola nordmanni,Glareolidae,Charadriiformes,11.3,1.9,4,Bruderer2001,5.8,9.9,NA,NA
-Grus grus,Gruidae,Gruiformes,13.6,0,1,Bruderer2001,NA,12.6,flapping,1
-Grus grus,Gruidae,Gruiformes,14.5,1.6,14,Bruderer2001,NA,12.6,mixed,1
-Gyps fulvus,Accipitridae,Accipitriformes,16,2.6,77,Bruderer2001,NA,21.2,gliding,1
-Gyps fulvus,Accipitridae,Accipitriformes,16.5,2.2,23,Bruderer2001,NA,13.3,mixed,1
-Delichon urbicum,Hirundinidae,Passeriformes,11,3.1,76,Bruderer2001,5,9.2,NA,NA
-Haliaeetus albicilla,Accipitridae,Accipitriformes,13.1,0,1,Bruderer2001,NA,12.8,mixed,1
-Aquila fasciata,Accipitridae,Accipitriformes,11,2.2,2,Bruderer2001,NA,18.6,gliding,1
-Aquila fasciata,Accipitridae,Accipitriformes,14,1.5,2,Bruderer2001,NA,10.9,mixed,1
-Hieraaetus pennatus,Accipitridae,Accipitriformes,11.3,1.7,2,Bruderer2001,NA,9.4,flapping,1
-Hieraaetus pennatus,Accipitridae,Accipitriformes,13.8,2.7,25,Bruderer2001,NA,15.9,gliding,1
-Hieraaetus pennatus,Accipitridae,Accipitriformes,12.5,3.1,21,Bruderer2001,NA,9.4,mixed,1
-Hirundo rustica,Hirundinidae,Passeriformes,11.3,2.9,108,Bruderer2001,4.8,8.8,NA,NA
-Hirundo daurica,Hirundinidae,Passeriformes,11.6,2,3,Bruderer2001,4.9,9.1,NA,NA
-Hippolais icterina,Acrocephalidae,Passeriformes,6.7,1.8,1,Bruderer2001,5.1,9.4,NA,NA
-Hippolais polyglotta,Acrocephalidae,Passeriformes,5.7,0,1,Bruderer2001,5.1,9.6,NA,NA
-Larus ridibundus,Laridae,Charadriiformes,11.2,3,15,Bruderer2001,6.5,10.4,NA,NA
-Larus canus,Laridae,Charadriiformes,11.1,0,1,Bruderer2001,6.8,10.8,NA,NA
-Larus cachinnans,Laridae,Charadriiformes,14,2.8,239,Bruderer2001,9.3,14.8,NA,NA
-Larus fuscus,Laridae,Charadriiformes,11.9,2.2,11,Bruderer2001,8.1,13.3,NA,NA
-Lanius collurio,Laniidae,Passeriformes,12.9,2.7,5,Bruderer2001,6.1,11.5,NA,NA
-Lullula arborea,Alaudidae,Passeriformes,9.8,0,1,Bruderer2001,5.6,10.5,NA,NA
-Mergus merganser,Anatidae,Anseriformes,21.2,0,1,Bruderer2001,13.1,20,NA,NA
-Merops apiaster,Meropidae,Coraciiformes,12.2,2.6,28,Bruderer2001,5.2,9.1,NA,NA
-Milvus migrans,Accipitridae,Accipitriformes,13.3,2.3,60,Bruderer2001,NA,16.1,gliding,1
-Milvus migrans,Accipitridae,Accipitriformes,11.7,1.3,7,Bruderer2001,NA,7.7,flapping,1
-Milvus migrans,Accipitridae,Accipitriformes,12.1,2.9,49,Bruderer2001,NA,7.7,mixed,1
-Milvus migrans,Accipitridae,Accipitriformes,11.5,1.3,2,Bruderer2001,7.7,12.3,NA,NA
-Milvus milvus,Accipitridae,Accipitriformes,14.8,0.9,3,Bruderer2001,NA,16.5,gliding,1
-Milvus milvus,Accipitridae,Accipitriformes,10.1,2.3,19,Bruderer2001,NA,8.2,mixed,1
-Monticola saxatilis,Muscicapidae,Passeriformes,15.5,0,1,Bruderer2001,6.2,11.1,NA,NA
-Motacilla alba,Motacillidae,Passeriformes,13,1.6,13,Bruderer2001,5.3,9.8,NA,NA
-Motacilla flava,Motacillidae,Passeriformes,12.7,1.8,7,Bruderer2001,5.1,9.5,NA,NA
-Motacilla flava,Motacillidae,Passeriformes,6.1,0.8,5,Bruderer2001,5.1,9.5,NA,NA
-Motacilla flava,Motacillidae,Passeriformes,11.9,1.2,4,Bruderer2001,5.1,9.5,NA,NA
-Muscicapa striata,Muscicapidae,Passeriformes,13.4,0.8,4,Bruderer2001,5,9.5,NA,NA
-Neophron percnopterus,Accipitridae,Accipitriformes,12.6,2.5,3,Bruderer2001,NA,10.6,flapping,1
-Neophron percnopterus,Accipitridae,Accipitriformes,15.6,2.3,93,Bruderer2001,NA,18.3,gliding,1
-Neophron percnopterus,Accipitridae,Accipitriformes,15.7,1.9,19,Bruderer2001,NA,10.6,mixed,1
-Neophron percnopterus,Accipitridae,Accipitriformes,10.5,0,1,Bruderer2001,10.6,17.1,NA,NA
-Numenius arquata,Scolopacidae,Charadriiformes,13.2,1.2,2,Bruderer2001,10.3,17,NA,NA
-Nycticorax nycticorax,Ardeidae,Pelecaniformes,11.2,0.5,4,Bruderer2001,8.3,13.7,NA,NA
-Oenanthe oenanthe,Muscicapidae,Passeriformes,12.8,0,1,Bruderer2001,5.4,9.9,NA,NA
-Oenanthe oenanthe,Muscicapidae,Passeriformes,13.1,1.2,2,Bruderer2001,5.4,9.9,NA,NA
-Pandion haliaetus,Pandionidae,Accipitriformes,12.5,1.7,11,Bruderer2001,NA,17.6,gliding,1
-Pandion haliaetus,Pandionidae,Accipitriformes,11.4,1.6,10,Bruderer2001,10,16.2,NA,NA
-Pandion haliaetus,Pandionidae,Accipitriformes,11.4,1.6,10,Bruderer2001,NA,10,flapping,1
-Pandion haliaetus,Pandionidae,Accipitriformes,13.7,2.6,21,Bruderer2001,NA,10,mixed,1
-Parus major,Paridae,Passeriformes,13.6,0,1,Bruderer2001,5.5,10.2,NA,NA
-Pelecanus onocrotalus,Pelecanidae,Pelecaniformes,15.6,0,1,Bruderer2001,NA,13.6,flapping,1
-Pelecanus onocrotalus,Pelecanidae,Pelecaniformes,16,1.7,5,Bruderer2001,NA,13.6,mixed,1
-Pernis apivorus,Accipitridae,Accipitriformes,10.2,1.5,16,Bruderer2001,9,15,NA,NA
-Pernis apivorus,Accipitridae,Accipitriformes,14.2,2.6,234,Bruderer2001,NA,16.5,gliding,1
-Pernis apivorus,Accipitridae,Accipitriformes,10.1,1.5,15,Bruderer2001,NA,9,flapping,1
-Pernis apivorus,Accipitridae,Accipitriformes,12.1,2.9,125,Bruderer2001,NA,9,mixed,1
-Phalacrocorax carbo,Phalacrocoracidae,Suliformes,16.7,3.3,2,Bruderer2001,13.5,21.4,NA,NA
-Calidris pugnax,Scolopacidae,Charadriiformes,13.6,1.2,3,Bruderer2001,7.4,12.6,NA,NA
-Phoenicopterus ruber,Phoenicopteridae,Phoenicopteriformes,15.2,2.7,3,Bruderer2001,13.1,20.9,NA,NA
-Phoenicurus ochruros,Muscicapidae,Passeriformes,9.3,2.9,7,Bruderer2001,5.1,9.6,NA,NA
-Phoenicurus phoenicurus,Muscicapidae,Passeriformes,7.5,2.7,8,Bruderer2001,5.3,10.1,NA,NA
-Phylloscopus trochilus,Phylloscopidae,Passeriformes,9.5,2.6,5,Bruderer2001,4.8,9.2,NA,NA
-Platalea leucorodia,Threskiornithidae,Pelecaniformes,14.1,1.4,7,Bruderer2001,12.4,20.6,NA,NA
-Plegadis falcinellus,Threskiornithidae,Pelecaniformes,12.6,1.7,5,Bruderer2001,9.6,15.6,NA,NA
-Pterocles coronatus,Pteroclidae,Pterocliformes,16.9,0,1,Bruderer2001,9.1,14.9,NA,NA
-Pterocles senegallus,Pteroclidae,Pterocliformes,18.4,0,1,Bruderer2001,8.4,13.8,NA,NA
-Pterocles orientalis,Pteroclidae,Pterocliformes,18.3,0.5,2,Bruderer2001,9.1,15,NA,NA
-Ptyonoprogne rupestris,Hirundinidae,Passeriformes,9.9,0,1,Bruderer2001,5,8.9,NA,NA
-Prunella modularis,Prunellidae,Passeriformes,12.2,0,1,Bruderer2001,6.1,11.4,NA,NA
-Prunella modularis,Prunellidae,Passeriformes,8,1.3,7,Bruderer2001,6.1,11.4,NA,NA
-Regulus regulus,Regulidae,Passeriformes,6,0,1,Bruderer2001,4.7,9.3,NA,NA
-Regulus ignicapillus,Regulidae,Passeriformes,6.7,0,1,Bruderer2001,4.8,9.6,NA,NA
-Riparia riparia,Hirundinidae,Passeriformes,11.3,1.6,9,Bruderer2001,4.6,8.6,NA,NA
-Saxicola rubetra,Muscicapidae,Passeriformes,8.1,1.1,6,Bruderer2001,5.4,10.1,NA,NA
-Serinus serinus,Fringillidae,Passeriformes,7.2,0,1,Bruderer2001,4.8,9.1,NA,NA
-Curruca hortensis,Sylviidae,Passeriformes,6.6,0,1,Bruderer2001,5.8,10.9,NA,NA
-Curruca curruca,Sylviidae,Passeriformes,8.2,3.7,2,Bruderer2001,5.3,10.1,NA,NA
-Curruca communis,Sylviidae,Passeriformes,10.6,1.6,3,Bruderer2001,5.5,10.1,NA,NA
-Sylvia borin,Sylviidae,Passeriformes,9.2,1.8,6,Bruderer2001,5.7,10.6,NA,NA
-Sylvia atricapilla,Sylviidae,Passeriformes,8.2,2.4,11,Bruderer2001,5.8,10.8,NA,NA
-Spilopelia senegalensis,Columbidae,Columbiformes,11.5,0,1,Bruderer2001,6.8,11.8,NA,NA
-Sturnus vulgaris,Sturnidae,Passeriformes,12.4,2.6,9,Bruderer2001,6.8,11.8,NA,NA
-Torgos tracheliotos,Accipitridae,Accipitriformes,16.1,0.8,1,Bruderer2001,NA,21.7,gliding,1
-Torgos tracheliotos,Accipitridae,Accipitriformes,11.8,0,1,Bruderer2001,NA,13.3,mixed,1
-Tringa ochropus,Scolopacidae,Charadriiformes,5.8,2,2,Bruderer2001,5.7,9.3,NA,NA
-Tringa ochropus,Scolopacidae,Charadriiformes,22.7,0,1,Bruderer2001,5.7,9.3,NA,NA
-Turdus merula,Turdidae,Passeriformes,9.3,2.5,3,Bruderer2001,7.5,13.7,NA,NA
-Turdus philomelos,Turdidae,Passeriformes,11.7,1.7,8,Bruderer2001,7.6,13.3,NA,NA
-Turdus philomelos,Turdidae,Passeriformes,11.9,2.4,2,Bruderer2001,7.6,13.3,NA,NA
-Turdus pilaris,Turdidae,Passeriformes,12.4,1.2,6,Bruderer2001,7.3,13,NA,NA
-Turdus viscivorus,Turdidae,Passeriformes,12.4,0.2,2,Bruderer2001,7.1,12.6,NA,NA
-Upupa epops,Upupidae,Bucerotiformes,10.8,0.4,1,Bruderer2001,6.2,11.3,NA,NA
-Vanellus vanellus,Charadriidae,Charadriiformes,11.9,2,2,Bruderer2001,6.5,10.7,NA,NA
+birdlife_name,species,speed,sd,n_tracks,source,V_mp,V_mr,flight_type,soaring_birds
+Accipiter nisus,Accipiter nisus,11.3,1.9,12,Alerstam2007,,,,
+Alauda arvensis,Alauda arvensis,15.1,2.1,15,Alerstam2007,,,,
+Anas acuta,Anas acuta,20.6,2.6,6,Alerstam2007,,,,
+Anas crecca,Anas crecca,19.7,4,9,Alerstam2007,,,,
+Mareca penelope,Anas penelope,20.6,2.1,36,Alerstam2007,,,,
+Anas platyrhynchos,Anas platyrhynchos,18.5,2.3,22,Alerstam2007,,,,
+Anser albifrons,Anser albifrons,16.1,2,5,Alerstam2007,,,,
+Anser anser,Anser anser,17.1,2.6,21,Alerstam2007,,,,
+Anser fabalis,Anser fabalis,17.3,2.7,44,Alerstam2007,,,,
+Anthus trivialis,Anthus trivialis,12.7,2.2,4,Alerstam2007,,,,
+Apus apus,Apus apus,9.7,2,34,Alerstam2007,,,,
+Aquila chrysaetos,Aquila chrysaetos,11.9,,1,Alerstam2007,,,,
+Ardea cinerea,Ardea cinerea,12.5,2.2,14,Alerstam2007,,,,
+Arenaria interpres,Arenaria interpres,14.9,0.7,2,Alerstam2007,,,,
+Aythya ferina,Aythya ferina,23.6,,1,Alerstam2007,,,,
+Aythya fuligula,Aythya fuligula,21.1,1.1,3,Alerstam2007,,,,
+Aythya marila,Aythya marila,21.3,,1,Alerstam2007,,,,
+Botaurus stellaris,Botaurus stellaris,8.8,,1,Alerstam2007,,,,
+Branta bernicla,Branta bernicla,17.7,2.8,97,Alerstam2007,,,,
+Branta canadensis,Branta canadensis,16.7,,1,Alerstam2007,,,,
+Branta leucopsis,Branta leucopsis,17,2.2,22,Alerstam2007,,,,
+Bucephala clangula,Bucephala clangula,20.3,3.8,10,Alerstam2007,,,,
+Buteo buteo,Buteo buteo,11.6,2.7,10,Alerstam2007,,,,
+Buteo lagopus,Buteo lagopus,10.5,0,2,Alerstam2007,,,,
+Calidris alpina,Calidris alpina,15.3,1.9,36,Alerstam2007,,,,
+Calidris canutus,Calidris canutus,20.1,1.9,7,Alerstam2007,,,,
+Linaria cannabina,Carduelis cannabina,14.8,4.5,2,Alerstam2007,,,,
+Spinus spinus,Carduelis spinus,14.5,1.6,60,Alerstam2007,,,,
+Charadrius hiaticula,Charadrius hiaticula,19.5,,1,Alerstam2007,,,,
+Circus aeruginosus,Circus aeruginosus,11.2,1.6,2,Alerstam2007,,,,
+Circus cyaneus,Circus cyaneus,9.1,0.7,2,Alerstam2007,,,,
+Clangula hyemalis,Clangula hyemalis,22,1.4,3,Alerstam2007,,,,
+Columba oenas,Columba oenas,15.8,2,8,Alerstam2007,,,,
+Columba palumbus,Columba palumbus,16.3,2.3,87,Alerstam2007,,,,
+Corvus corax,Corvus corax,14.3,0.9,5,Alerstam2007,,,,
+Corvus corone,Corvus corone,13.5,2.6,5,Alerstam2007,,,,
+Corvus frugilegus,Corvus frugilegus,11.5,1.2,16,Alerstam2007,,,,
+Corvus monedula,Corvus monedula,12.5,2.6,13,Alerstam2007,,,,
+Cygnus columbianus,Cygnus columbianus,18.5,,1,Alerstam2007,,,,
+Cygnus cygnus,Cygnus cygnus,17.3,2,10,Alerstam2007,,,,
+Cygnus olor,Cygnus olor,16.2,1.6,24,Alerstam2007,,,,
+Delichon urbicum,Delichon urbicum,9.7,0.5,2,Alerstam2007,,,,
+Falco tinnunculus,Falco tinnunculus,10.1,,1,Alerstam2007,,,,
+Fringilla coelebs,Fringilla coelebs,12.8,1.9,23,Alerstam2007,,,,
+Fringilla montifringilla,Fringilla montifringilla,15,2.9,4,Alerstam2007,,,,
+Gallinago gallinago,Gallinago gallinago,17.1,2.7,22,Alerstam2007,,,,
+Garrulus glandarius,Garrulus glandarius,6.7,1,2,Alerstam2007,,,,
+Gavia adamsii,Gavia adamsii,18.7,0.5,2,Alerstam2007,,,,
+Gavia arctica,Gavia arctica,19.3,2.1,13,Alerstam2007,,,,
+Gavia stellata,Gavia stellata,18.6,3.9,7,Alerstam2007,,,,
+Grus grus,Grus grus,15,2.7,12,Alerstam2007,,,,
+Haematopus ostralegus,Haematopus ostralegus,13,2.5,19,Alerstam2007,,,,
+Haliaeetus albicilla,Haliaeetus albicilla,13.6,0.9,2,Alerstam2007,,,,
+Hirundo rustica,Hirundo rustica,10,2,2,Alerstam2007,,,,
+Larus argentatus,Larus argentatus,12.8,1.8,18,Alerstam2007,,,,
+Larus canus,Larus canus,13.4,2.9,36,Alerstam2007,,,,
+Larus fuscus,Larus fuscus,13.1,1.9,11,Alerstam2007,,,,
+Larus glaucoides,Larus glaucoides,15.9,,1,Alerstam2007,,,,
+Larus hyperboreus,Larus hyperboreus,13.4,0.8,3,Alerstam2007,,,,
+Larus marinus,Larus marinus,13.7,1.2,4,Alerstam2007,,,,
+Hydrocoloeus minutus,Larus minutus,11.5,0.1,2,Alerstam2007,,,,
+Larus ridibundus,Larus ridibundus,11.9,1.6,19,Alerstam2007,,,,
+Limosa lapponica,Limosa lapponica,18.3,2.1,15,Alerstam2007,,,,
+Melanitta fusca,Melanitta fusca,20.1,4.7,32,Alerstam2007,,,,
+Melanitta nigra,Melanitta nigra,22.1,4,14,Alerstam2007,,,,
+Mergus merganser,Mergus merganser,19.7,1.1,2,Alerstam2007,,,,
+Mergus serrator,Mergus serrator,20,2.9,33,Alerstam2007,,,,
+Milvus milvus,Milvus milvus,12,0.3,2,Alerstam2007,,,,
+Motacilla alba,Motacilla alba,14.1,1.9,5,Alerstam2007,,,,
+Nucifraga caryocatactes,Nucifraga caryocatactes,13.4,2.8,2,Alerstam2007,,,,
+Numenius arquata,Numenius arquata,16.3,2.3,16,Alerstam2007,,,,
+Numenius phaeopus,Numenius phaeopus,16.3,0.9,4,Alerstam2007,,,,
+Pandion haliaetus,Pandion haliaetus,13.3,2.7,5,Alerstam2007,,,,
+Periparus ater,Parus ater,10.6,2.3,2,Alerstam2007,,,,
+Pernis apivorus,Pernis apivorus,12.5,2.3,13,Alerstam2007,,,,
+Phalacrocorax carbo,Phalacrocorax carbo,15.2,3,35,Alerstam2007,,,,
+Phalaropus fulicarius,Phalaropus fulicarius,12.4,2.3,6,Alerstam2007,,,,
+Phalaropus lobatus,Phalaropus lobatus,13.1,,1,Alerstam2007,,,,
+Calidris pugnax,Philomachus pugnax,17.4,1,3,Alerstam2007,,,,
+Pluvialis dominica,Pluvialis dominica,13.7,,1,Alerstam2007,,,,
+Pluvialis squatarola,Pluvialis squatarola,17.9,3.9,14,Alerstam2007,,,,
+Polysticta stelleri,Polysticta stelleri,21.9,,1,Alerstam2007,,,,
+Porzana porzana,Porzana porzana,13.9,,1,Alerstam2007,,,,
+Pyrrhula pyrrhula,Pyrrhula pyrrhula,13.4,,1,Alerstam2007,,,,
+Riparia riparia,Riparia riparia,14.3,,1,Alerstam2007,,,,
+Rissa tridactyla,Rissa tridactyla,13.1,0.4,2,Alerstam2007,,,,
+Somateria mollissima,Somateria mollissima,17.9,2.4,240,Alerstam2007,,,,
+Somateria spectabilis,Somateria spectabilis,16,0.3,2,Alerstam2007,,,,
+Stercorarius longicaudus,Stercorarius longicaudus,13.6,1.9,3,Alerstam2007,,,,
+Stercorarius parasiticus,Stercorarius parasiticus,13.8,2.2,7,Alerstam2007,,,,
+Stercorarius pomarinus,Stercorarius pomarinus,15.2,2.3,16,Alerstam2007,,,,
+Hydroprogne caspia,Sterna caspia,12.1,,1,Alerstam2007,,,,
+Sterna paradisaea,Sterna paradisaea,10.9,0.9,2,Alerstam2007,,,,
+Sturnus vulgaris,Sturnus vulgaris,16.2,4.3,4,Alerstam2007,,,,
+Tadorna tadorna,Tadorna tadorna,15.4,,1,Alerstam2007,,,,
+Tringa glareola,Tringa glareola,9.6,1.7,3,Alerstam2007,,,,
+Tringa nebularia,Tringa nebularia,12.3,3.3,5,Alerstam2007,,,,
+Turdus iliacus,Turdus iliacus,13.8,1.8,6,Alerstam2007,,,,
+Turdus philomelos,Turdus philomelos,11,2.1,6,Alerstam2007,,,,
+Turdus pilaris,Turdus pilaris,13,2.9,15,Alerstam2007,,,,
+Turdus viscivorus,Turdus viscivorus,11.9,3.3,3,Alerstam2007,,,,
+Vanellus vanellus,Vanellus vanellus,12.8,1.3,14,Alerstam2007,,,,
+Accipiter brevipes,Accipiter brevipes,10.8,2.3,18,Bruderer2001,7.3,12.3,,
+Accipiter brevipes,Accipiter brevipes,13.3,2.3,44,Bruderer2001,,13.3,gliding,1
+Accipiter brevipes,Accipiter brevipes,11.1,2.1,57,Bruderer2001,,7.3,flapping,1
+Accipiter brevipes,Accipiter brevipes,11.4,2.4,91,Bruderer2001,,7.3,mixed,1
+Accipiter gentilis,Accipiter gentilis,9.7,0,1,Bruderer2001,,9.1,mixed,1
+Accipiter nisus,Accipiter nisus,9.8,1.3,47,Bruderer2001,7.4,12.9,,
+Accipiter nisus,Accipiter nisus,10.9,1.3,65,Bruderer2001,,13,gliding,1
+Accipiter nisus,Accipiter nisus,10,1.8,64,Bruderer2001,,7.4,flapping,1
+Accipiter nisus,Accipiter nisus,11.5,2.2,25,Bruderer2001,,7.4,mixed,1
+Acrocephalus arundinaceus,Acrocephalus arundinaceus,7.1,0,1,Bruderer2001,6.1,10.9,,
+Acrocephalus palustris,Acrocephalus palustris,8.8,0.8,2,Bruderer2001,5.2,9.7,,
+Acrocephalus scirpaceus,Acrocephalus scirpaceus,6.6,2.8,11,Bruderer2001,5.2,9.7,,
+Actitis hypoleucos,Actitis hypoleucos,9.1,3.6,2,Bruderer2001,6.1,10.6,,
+Aegypius monachus,Aegypius monachus,15.5,0,1,Bruderer2001,,14.2,mixed,1
+Alauda arvensis,Alauda arvensis,12.7,2.5,20,Bruderer2001,5.7,10.5,,
+Alectoris chukar,Alectoris chukar,14.2,0,1,Bruderer2001,12.2,22,,
+Anas acuta,Anas acuta,13.3,0.9,2,Bruderer2001,11,17.7,,
+Anas platyrhynchos,Anas platyrhynchos,21.4,2.4,7,Bruderer2001,11.9,19.1,,
+Spatula querquedula,Anas querquedula,14.1,0,1,Bruderer2001,9.5,15.9,,
+Anthus pratensis,Anthus pratensis,10.5,2.7,6,Bruderer2001,5.3,10,,
+Anthus pratensis,Anthus pratensis,8.8,0.7,4,Bruderer2001,5.3,10,,
+Anthus trivialis,Anthus trivialis,12,4.8,4,Bruderer2001,5.5,10.2,,
+Anthus trivialis,Anthus trivialis,7,1.4,8,Bruderer2001,5.5,10.2,,
+Apus apus,Apus apus,10.6,3,163,Bruderer2001,5.2,8.6,,
+Apus apus,Apus apus,9.2,0.2,2,Bruderer2001,5.2,8.6,,
+Tachymarptis melba,Apus melba,12.6,2.9,36,Bruderer2001,6.2,10.1,,
+Apus pallidus,Apus pallidus,10.5,1.9,33,Bruderer2001,5.2,9.1,,
+Aquila chrysaetos,Aquila chrysaetos,15.1,1.7,2,Bruderer2001,,10.5,gliding,1
+Aquila chrysaetos,Aquila chrysaetos,13,6.2,7,Bruderer2001,,12.6,flapping,1
+Aquila heliaca,Aquila heliaca,9.5,0.9,1,Bruderer2001,11.6,18.6,,
+Aquila heliaca,Aquila heliaca,9.5,0.9,1,Bruderer2001,,11.6,mixed,1
+Aquila nipalensis,Aquila nipalensis,7.7,1,1,Bruderer2001,,11.3,flapping,1
+Aquila nipalensis,Aquila nipalensis,14.3,2.5,101,Bruderer2001,,19.5,gliding,1
+Aquila nipalensis,Aquila nipalensis,15.3,2,9,Bruderer2001,,11.3,mixed,1
+Clanga pomarina,Aquila pomarina,11.7,3,2,Bruderer2001,,9.8,flapping,1
+Clanga pomarina,Aquila pomarina,14.5,2.7,67,Bruderer2001,,16.2,gliding,1
+Clanga pomarina,Aquila pomarina,14.7,2,9,Bruderer2001,,9.8,mixed,1
+Ardea cinerea,Ardea cinerea,11.2,1.6,49,Bruderer2001,9.4,15.2,,
+Ardea purpurea,Ardea purpurea,10.8,2,12,Bruderer2001,9.1,15,,
+Ardeola ralloides,Ardeola ralloides,11.7,0,1,Bruderer2001,7.3,12.3,,
+Asio flammeus,Asio flammeus,8.4,1.4,3,Bruderer2001,7.1,11.9,,
+Buteo buteo,Buteo buteo,11.5,1.4,93,Bruderer2001,,16.4,gliding,1
+Buteo buteo,Buteo buteo,13.3,1.3,13,Bruderer2001,,8,flapping,1
+Buteo buteo,Buteo buteo,9.6,1.7,57,Bruderer2001,9.8,16.5,,
+Buteo buteo,Buteo buteo,9.6,1.7,,Bruderer2001,,9.8,flapping,1
+Buteo buteo,Buteo buteo,11.1,0,1,Bruderer2001,8,13.4,,
+Buteo buteo,Buteo buteo,11,3.4,23,Bruderer2001,,9.8,mixed,1
+Buteo buteo,Buteo buteo,14.4,2.4,324,Bruderer2001,,14.9,gliding,1
+Buteo buteo,Buteo buteo,14.4,2.4,51,Bruderer2001,,8,mixed,1
+Buteo rufinus,Buteo rufinus,14.6,2.8,11,Bruderer2001,,16.7,gliding,1
+Buteo rufinus,Buteo rufinus,14.8,2.4,17,Bruderer2001,,9.8,mixed,1
+Calidris alpina,Calidris alpina,8.9,1.6,2,Bruderer2001,5.7,9.3,,
+Caprimulgus ruficollis,Caprimulgus ruficollis,8.9,0,1,Bruderer2001,5,8.8,,
+Linaria cannabina,Carduelis cannabina,15.7,0,1,Bruderer2001,5.4,10,,
+Carduelis carduelis,Carduelis carduelis,12.8,3,3,Bruderer2001,5.3,9.7,,
+Chloris chloris,Carduelis chloris,12.2,0,1,Bruderer2001,5.9,10.6,,
+Acanthis flammea,Carduelis flammea,8.4,0,1,Bruderer2001,4.7,9,,
+Spinus spinus,Carduelis spinus,12.4,0.9,2,Bruderer2001,5.1,9.4,,
+Spinus spinus,Carduelis spinus,6.7,1,2,Bruderer2001,5.1,9.4,,
+Charadrius hiaticula,Charadrius hiaticula,10.6,0,1,Bruderer2001,5.5,8.9,,
+Chlidonias leucopterus,Chlidonias leucopterus,12,0,1,Bruderer2001,5.1,8.8,,
+Ciconia ciconia,Ciconia ciconia,13.9,2.9,26,Bruderer2001,,12.9,flapping,1
+Ciconia ciconia,Ciconia ciconia,13.5,2.5,109,Bruderer2001,,12.9,mixed,1
+Ciconia ciconia,Ciconia ciconia,9.1,1.2,3,Bruderer2001,12.9,23,,
+Ciconia nigra,Ciconia nigra,16,1.8,6,Bruderer2001,,13.2,flapping,1
+Ciconia nigra,Ciconia nigra,15.4,2.2,21,Bruderer2001,,13.2,mixed,1
+Circaetus gallicus,Circaetus gallicus,13.6,2.2,34,Bruderer2001,,17.9,gliding,1
+Circaetus gallicus,Circaetus gallicus,13.4,2.3,31,Bruderer2001,,9.5,mixed,1
+Circus aeruginosus,Circus aeruginosus,12.6,2,50,Bruderer2001,,15,gliding,1
+Circus aeruginosus,Circus aeruginosus,10.1,2,22,Bruderer2001,,8,flapping,1
+Circus aeruginosus,Circus aeruginosus,9.7,1.1,15,Bruderer2001,8,13.5,,
+Circus aeruginosus,Circus aeruginosus,11.6,2.1,4,Bruderer2001,,8,mixed,1
+Circus cyaneus,Circus cyaneus,11.7,1.5,3,Bruderer2001,,14.6,gliding,1
+Circus cyaneus,Circus cyaneus,11.4,1.1,3,Bruderer2001,,7.4,mixed,1
+Circus macrourus,Circus macrourus,9.6,1,3,Bruderer2001,,7.2,flapping,1
+Circus macrourus,Circus macrourus,13.2,4,5,Bruderer2001,,14.3,gliding,1
+Circus macrourus,Circus macrourus,12.9,1.1,7,Bruderer2001,,7.2,mixed,1
+Circus macrourus,Circus macrourus,8.5,0,1,Bruderer2001,7.2,12,,
+Circus pygargus,Circus pygargus,8.4,0.5,1,Bruderer2001,,6.4,flapping,1
+Circus pygargus,Circus pygargus,12.4,1.9,10,Bruderer2001,,13.9,gliding,1
+Circus pygargus,Circus pygargus,10.7,2.1,23,Bruderer2001,,6.4,mixed,1
+Columba livia,Columba livia,17.5,2,39,Bruderer2001,8.9,14.7,,
+Columba palumbus,Columba palumbus,17.6,3.2,11,Bruderer2001,9.4,15.6,,
+Corvus corax,Corvus corax,14.1,3.2,6,Bruderer2001,9.9,16.4,,
+Corvus corone,Corvus corone,9.9,2,50,Bruderer2001,9,15.4,,
+Corvus frugilegus,Corvus frugilegus,13,1.4,8,Bruderer2001,8.4,14.5,,
+Corvus monedula,Corvus monedula,14.7,1.7,3,Bruderer2001,7.4,12.8,,
+Corvus ruficollis,Corvus ruficollis,14.3,2.2,25,Bruderer2001,8.8,14.9,,
+Cuculus canorus,Cuculus canorus,10.4,0,1,Bruderer2001,6.5,11.1,,
+Cursorius cursor,Cursorius cursor,15.1,2.8,4,Bruderer2001,6.6,11.1,,
+Delichon urbicum,Delichon urbicum,11,3.1,76,Bruderer2001,5,9.2,,
+Ardea alba,Egretta alba,10.2,1.1,2,Bruderer2001,8.6,13.6,,
+Elanus caeruleus,Elanus caeruleus,15.3,0,1,Bruderer2001,6.5,11,,
+Emberiza hortulana,Emberiza hortulana,7.7,0,1,Bruderer2001,5.6,10.5,,
+Erithacus rubecula,Erithacus rubecula,7.5,1.7,5,Bruderer2001,5.6,10.6,,
+Falco biarmicus,Falco biarmicus,11.1,2.7,3,Bruderer2001,9.2,15.2,,
+Falco concolor,Falco concolor,15.2,1.9,5,Bruderer2001,6.5,10.8,,
+Falco eleonorae,Falco eleonorae,12.8,2.3,2,Bruderer2001,6.7,10,,
+Falco naumanni,Falco naumanni,11.3,2.8,12,Bruderer2001,6.6,11.2,,
+Falco peregrinus,Falco pelegrinoides,14.4,0.1,2,Bruderer2001,8.8,14.4,,
+Falco peregrinus,Falco peregrinus,12.1,3.5,13,Bruderer2001,9.7,15.8,,
+Falco subbuteo,Falco subbuteo,11.3,2.2,20,Bruderer2001,6.5,10.8,,
+Falco tinnunculus,Falco tinnunculus,7.6,0,1,Bruderer2001,6.9,11.3,,
+Falco tinnunculus,Falco tinnunculus,12.3,2.5,152,Bruderer2001,6.9,11.3,,
+Falco vespertinus,Falco vespertinus,12.8,1,4,Bruderer2001,6.5,10.9,,
+Ficedula hypoleuca,Ficedula hypoleuca,9.5,1.8,21,Bruderer2001,4.8,9.1,,
+Fringilla coelebs,Fringilla coelebs,12.8,2.4,52,Bruderer2001,5.3,10,,
+Fringilla montifringilla,Fringilla montifringilla,11.6,0.2,2,Bruderer2001,5.5,10.3,,
+Gallinago gallinago,Gallinago gallinago,15.5,0,1,Bruderer2001,7.1,11.7,,
+Garrulus glandarius,Garrulus glandarius,12.9,3.8,2,Bruderer2001,7.6,13.6,,
+Glareola nordmanni,Glareola nordmanni,11.3,1.9,4,Bruderer2001,5.8,9.9,,
+Glareola pratincola,Glareola pratincola,12.1,1.6,8,Bruderer2001,5.4,9.4,,
+Grus grus,Grus grus,13.6,0,1,Bruderer2001,,12.6,flapping,1
+Grus grus,Grus grus,14.5,1.6,14,Bruderer2001,,12.6,mixed,1
+Gyps fulvus,Gyps fulvus,16,2.6,77,Bruderer2001,,21.2,gliding,1
+Gyps fulvus,Gyps fulvus,16.5,2.2,23,Bruderer2001,,13.3,mixed,1
+Haliaeetus albicilla,Haliaeetus albicilla,13.1,0,1,Bruderer2001,,12.8,mixed,1
+Aquila fasciata,Hieraaetus fasciatus,11,2.2,2,Bruderer2001,,18.6,gliding,1
+Aquila fasciata,Hieraaetus fasciatus,14,1.5,2,Bruderer2001,,10.9,mixed,1
+Hieraaetus pennatus,Hieraaetus pennatus,11.3,1.7,2,Bruderer2001,,9.4,flapping,1
+Hieraaetus pennatus,Hieraaetus pennatus,13.8,2.7,25,Bruderer2001,,15.9,gliding,1
+Hieraaetus pennatus,Hieraaetus pennatus,12.5,3.1,21,Bruderer2001,,9.4,mixed,1
+Hippolais icterina,Hippolais icterina,6.7,1.8,1,Bruderer2001,5.1,9.4,,
+Hippolais polyglotta,Hippolais polyglotta,5.7,0,1,Bruderer2001,5.1,9.6,,
+Hirundo daurica,Hirundo daurica,11.6,2,3,Bruderer2001,4.9,9.1,,
+Hirundo rustica,Hirundo rustica,11.3,2.9,108,Bruderer2001,4.8,8.8,,
+Lanius collurio,Lanius collurio,12.9,2.7,5,Bruderer2001,6.1,11.5,,
+Larus cachinnans,Larus cachinnans,14,2.8,239,Bruderer2001,9.3,14.8,,
+Larus canus,Larus canus,11.1,0,1,Bruderer2001,6.8,10.8,,
+Larus fuscus,Larus fuscus,11.9,2.2,11,Bruderer2001,8.1,13.3,,
+Larus ridibundus,Larus ridibundus,11.2,3,15,Bruderer2001,6.5,10.4,,
+Lullula arborea,Lullula arborea,9.8,0,1,Bruderer2001,5.6,10.5,,
+Mergus merganser,Mergus merganser,21.2,0,1,Bruderer2001,13.1,20,,
+Merops apiaster,Merops apiaster,12.2,2.6,28,Bruderer2001,5.2,9.1,,
+Milvus migrans,Milvus migrans,13.3,2.3,60,Bruderer2001,,16.1,gliding,1
+Milvus migrans,Milvus migrans,11.7,1.3,7,Bruderer2001,,7.7,flapping,1
+Milvus migrans,Milvus migrans,12.1,2.9,49,Bruderer2001,,7.7,mixed,1
+Milvus migrans,Milvus migrans,11.5,1.3,2,Bruderer2001,7.7,12.3,,
+Milvus milvus,Milvus milvus,14.8,0.9,3,Bruderer2001,,16.5,gliding,1
+Milvus milvus,Milvus milvus,10.1,2.3,19,Bruderer2001,,8.2,mixed,1
+Monticola saxatilis,Monticola saxatilis,15.5,0,1,Bruderer2001,6.2,11.1,,
+Motacilla alba,Motacilla alba,13,1.6,13,Bruderer2001,5.3,9.8,,
+Motacilla flava,Motacilla flava,12.7,1.8,7,Bruderer2001,5.1,9.5,,
+Motacilla flava,Motacilla flava,6.1,0.8,5,Bruderer2001,5.1,9.5,,
+Motacilla flava,Motacilla flava,11.9,1.2,4,Bruderer2001,5.1,9.5,,
+Muscicapa striata,Muscicapa striata,13.4,0.8,4,Bruderer2001,5,9.5,,
+Neophron percnopterus,Neophron percnopterus,12.6,2.5,3,Bruderer2001,,10.6,flapping,1
+Neophron percnopterus,Neophron percnopterus,15.6,2.3,93,Bruderer2001,,18.3,gliding,1
+Neophron percnopterus,Neophron percnopterus,15.7,1.9,19,Bruderer2001,,10.6,mixed,1
+Neophron percnopterus,Neophron percnopterus,10.5,0,1,Bruderer2001,10.6,17.1,,
+Numenius arquata,Numenius arquata,13.2,1.2,2,Bruderer2001,10.3,17,,
+Nycticorax nycticorax,Nycticorax nycticorax,11.2,0.5,4,Bruderer2001,8.3,13.7,,
+Oenanthe oenanthe,Oenanthe oenanthe,12.8,0,1,Bruderer2001,5.4,9.9,,
+Oenanthe oenanthe,Oenanthe oenanthe,13.1,1.2,2,Bruderer2001,5.4,9.9,,
+Pandion haliaetus,Pandion haliaetus,12.5,1.7,11,Bruderer2001,,17.6,gliding,1
+Pandion haliaetus,Pandion haliaetus,11.4,1.6,10,Bruderer2001,10,16.2,,
+Pandion haliaetus,Pandion haliaetus,11.4,1.6,10,Bruderer2001,,10,flapping,1
+Pandion haliaetus,Pandion haliaetus,13.7,2.6,21,Bruderer2001,,10,mixed,1
+Parus major,Parus major,13.6,0,1,Bruderer2001,5.5,10.2,,
+Pelecanus onocrotalus,Pelecanus onocrotalus,15.6,0,1,Bruderer2001,,13.6,flapping,1
+Pelecanus onocrotalus,Pelecanus onocrotalus,16,1.7,5,Bruderer2001,,13.6,mixed,1
+Pernis apivorus,Pernis apivorus,10.2,1.5,16,Bruderer2001,9,15,,
+Pernis apivorus,Pernis apivorus,14.2,2.6,234,Bruderer2001,,16.5,gliding,1
+Pernis apivorus,Pernis apivorus,10.1,1.5,15,Bruderer2001,,9,flapping,1
+Pernis apivorus,Pernis apivorus,12.1,2.9,125,Bruderer2001,,9,mixed,1
+Phalacrocorax carbo,Phalacrocorax carbo,16.7,3.3,2,Bruderer2001,13.5,21.4,,
+Calidris pugnax,Philomachus pugnax,13.6,1.2,3,Bruderer2001,7.4,12.6,,
+Phoenicopterus ruber,Phoenicopterus ruber,15.2,2.7,3,Bruderer2001,13.1,20.9,,
+Phoenicurus ochruros,Phoenicurus ochruros,9.3,2.9,7,Bruderer2001,5.1,9.6,,
+Phoenicurus phoenicurus,Phoenicurus phoenicurus,7.5,2.7,8,Bruderer2001,5.3,10.1,,
+Phylloscopus trochilus,Phylloscopus trochilus,9.5,2.6,5,Bruderer2001,4.8,9.2,,
+Platalea leucorodia,Platalea leucorodia,14.1,1.4,7,Bruderer2001,12.4,20.6,,
+Plegadis falcinellus,Plegadis falcinellus,12.6,1.7,5,Bruderer2001,9.6,15.6,,
+Prunella modularis,Prunella modularis,12.2,0,1,Bruderer2001,6.1,11.4,,
+Prunella modularis,Prunella modularis,8,1.3,7,Bruderer2001,6.1,11.4,,
+Pterocles coronatus,Pterocles coronatus,16.9,0,1,Bruderer2001,9.1,14.9,,
+Pterocles orientalis,Pterocles orientalis,18.3,0.5,2,Bruderer2001,9.1,15,,
+Pterocles senegallus,Pterocles senegallus,18.4,0,1,Bruderer2001,8.4,13.8,,
+Ptyonoprogne rupestris,Ptyonoprogne rupestris,9.9,0,1,Bruderer2001,5,8.9,,
+Regulus ignicapillus,Regulus ignicapillus,6.7,0,1,Bruderer2001,4.8,9.6,,
+Regulus regulus,Regulus regulus,6,0,1,Bruderer2001,4.7,9.3,,
+Riparia riparia,Riparia riparia,11.3,1.6,9,Bruderer2001,4.6,8.6,,
+Saxicola rubetra,Saxicola rubetra,8.1,1.1,6,Bruderer2001,5.4,10.1,,
+Serinus serinus,Serinus serinus,7.2,0,1,Bruderer2001,4.8,9.1,,
+Spilopelia senegalensis,Streptopelia senegalensis,11.5,0,1,Bruderer2001,6.8,11.8,,
+Sturnus vulgaris,Sturnus vulgaris,12.4,2.6,9,Bruderer2001,6.8,11.8,,
+Sylvia atricapilla,Sylvia atricapilla,8.2,2.4,11,Bruderer2001,5.8,10.8,,
+Sylvia borin,Sylvia borin,9.2,1.8,6,Bruderer2001,5.7,10.6,,
+Curruca communis,Sylvia communis,10.6,1.6,3,Bruderer2001,5.5,10.1,,
+Curruca curruca,Sylvia curruca,8.2,3.7,2,Bruderer2001,5.3,10.1,,
+Curruca hortensis,Sylvia hortensis,6.6,0,1,Bruderer2001,5.8,10.9,,
+Torgos tracheliotos,Torgos tracheliotus,16.1,0.8,1,Bruderer2001,,21.7,gliding,1
+Torgos tracheliotos,Torgos tracheliotus,11.8,0,1,Bruderer2001,,13.3,mixed,1
+Tringa ochropus,Tringa ochropus,5.8,2,2,Bruderer2001,5.7,9.3,,
+Tringa ochropus,Tringa ochropus,22.7,0,1,Bruderer2001,5.7,9.3,,
+Turdus merula,Turdus merula,9.3,2.5,3,Bruderer2001,7.5,13.7,,
+Turdus philomelos,Turdus philomelos,11.7,1.7,8,Bruderer2001,7.6,13.3,,
+Turdus philomelos,Turdus philomelos,11.9,2.4,2,Bruderer2001,7.6,13.3,,
+Turdus pilaris,Turdus pilaris,12.4,1.2,6,Bruderer2001,7.3,13,,
+Turdus viscivorus,Turdus viscivorus,12.4,0.2,2,Bruderer2001,7.1,12.6,,
+Upupa epops,Upupa epops,10.8,0.4,1,Bruderer2001,6.2,11.3,,
+Vanellus vanellus,Vanellus vanellus,11.9,2,2,Bruderer2001,6.5,10.7,,

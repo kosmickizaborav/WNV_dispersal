@@ -1,5 +1,5 @@
 #' ---
-#' title: "Functions used to visualize data"
+#' title: "Functions used to visualize data from script 6 distance"
 #' output: github_document
 #' ---
 
@@ -119,7 +119,7 @@ plot_steps_count <- function(
   mb <- ggplot(month_limits) +
     geom_text(aes(x = mid_yd, y = 1, label = month), hjust = 0.5, vjust = 0.5) +
     geom_vline(aes(xintercept = last_yd), color = "gray33") +
-    scale_x_continuous(expand = c(0, 0), limits = c(1, 366)) +
+    scale_x_continuous(expand = c(0, 0), limits = c(0, 367)) +
     scale_y_continuous(expand = c(0, 0), limits = c(0, 2)) +
     theme_void() +  # Remove everything
     theme(
@@ -148,7 +148,7 @@ plot_steps_count <- function(
     geom_vline(
       data = month_limits, aes(xintercept = last_yd), color = "gray33"
     ) +
-    scale_x_continuous(expand = c(0, 0), limits = c(1, 366), breaks = seq(1, 366, 30)) +
+    scale_x_continuous(expand = c(0, 0), limits = c(0, 367), breaks = seq(1, 366, 30)) +
     scale_y_continuous(limits = c(0, NA), expand = expansion(mult = c(0, 0.1))) +
     theme_bw() +
     labs(
@@ -292,7 +292,17 @@ plot_steps_count <- function(
 
 plot_steps_timeline <- function(steps = NULL) {
   
-  df_timeline <- steps[, .(day_cycle = day_cycle_1, file)][
+  df_timeline <- copy(steps)
+  
+  if("day_cycle_1" %in% names(df_timeline)){
+    setnames(df_timeline, old = "day_cycle_1", new = "day_cycle", skip_abs = T)
+  }
+  
+  df_timeline <- df_timeline[, .(day_cycle, file)]
+  
+  df_timeline <- setorder(df_timeline, file, day_cycle)
+  
+  df_timeline[
     , `:=`(
       y = year(day_cycle),
       yd = as.POSIXlt(as.Date(day_cycle))$yday  + 1)][
@@ -384,12 +394,12 @@ plot_steps_timeline <- function(steps = NULL) {
     ) 
   
   mb <- ggplot() + 
-    geom_segment(aes(x = 1, xend = 366, y = 1, yend = 1), color = "gray33") +
-    geom_segment(aes(x = 1, xend = 366, y = 10, yend = 10), color = "gray33") +
+    geom_segment(aes(x = 0, xend = 367, y = 1, yend = 1), color = "gray33") +
+    geom_segment(aes(x = 0, xend = 367, y = 10, yend = 10), color = "gray33") +
     geom_vline(
-      aes(xintercept = c(1, month_limits$last_yd)), color = "gray33"
+      aes(xintercept = c(0, month_limits$last_yd)), color = "gray33"
     ) +
-    scale_x_continuous(expand = c(0,0), limits = c(1, 396)) +
+    scale_x_continuous(expand = c(0,0), limits = c(0, 396)) +
     scale_y_continuous(expand = c(0, 0)) +
     geom_text(
       data = month_limits, aes(x = mid_yd, y = 5, label = month),
@@ -402,16 +412,16 @@ plot_steps_timeline <- function(steps = NULL) {
     geom_vline(
       aes(xintercept = month_limits$last_yd), color = "gray33"
     ) +
-    geom_segment(aes(x = 1, xend = 366, y = 0, yend = 0), color = "gray33") +
-    geom_step(data = count_df, aes(x = yd, y = step_count)) +
+    geom_line(data = count_df, aes(x = yd, y = step_count)) +
+    geom_segment(aes(x = 0, xend = 367, y = 0, yend = 0), color = "gray33") +
     scale_x_continuous(
-      expand = c(0,0), limits = c(1, 396), breaks = seq(1, 366, 30)
+      expand = c(0,0), limits = c(0, 396), breaks = seq(1, 366, 30)
     ) +
     scale_y_continuous(
       expand = c(0, NA), limits = c(0, max(count_df$step_count)+1)
     ) +
     theme_bw() +
-    labs(x = "day of the year", y = "steps \n per day") +
+    labs(x = "day of the year", y = "count \n per day") +
     theme(
       plot.margin = margin(t = 0, r = 0, b = 1, l = 1, unit = "mm"), 
       axis.ticks = element_blank(),
@@ -445,22 +455,46 @@ expand_bbox <- function(bbox, deg) {
 
 # FUNCTION 7: plot_on_world_map ---------------------------------------------
 
-plot_on_world_map <- function(steps, crs = sf::st_crs(4326), pal = NULL){
+plot_on_world_map <- function(
+    steps, 
+    crs = sf::st_crs(4326),
+    as_steps = T, 
+    coord_cols = c("x_", "y_"), 
+    exp_deg = 5, 
+    pal = NULL, 
+    color_by = NULL, 
+    title = NULL){
   
   world <- rnaturalearth::ne_countries(scale = "medium", returnclass = "sf") 
   
-  locs <-  unique(
-    rbindlist(list(
-      steps[, .(x_ = x1_, y_ = y1_, t_ = t1_, day_cycle = day_cycle_1, file)], 
-      steps[, .(x_ = x2_, y_ = y2_, t_ = t2_, day_cycle = day_cycle_2, file)])))[
-    , y := as.factor(year(day_cycle))]
+  if(as_steps == T){
+    
+    locs <-  unique(
+      rbindlist(list(
+        copy(steps)[
+          , .(x_ = x1_, y_ = y1_, t_ = t1_, day_cycle = day_cycle_1, file)], 
+        copy(steps)[
+          , .(x_ = x2_, y_ = y2_, t_ = t2_, day_cycle = day_cycle_2, file)])))
+    
+  } else {
+    
+    locs <- copy(steps)
+    
+  }
   
-  locs <- sf::st_as_sf(locs, coords = c("x_", "y_"), crs = crs)
+  if(is.null(color_by)){
+    locs <- locs[ , y := as.factor(year(day_cycle))]
+    } else{ 
+    locs[, y := as.factor(get(color_by))] }
   
-  ns_bbox <- sf::st_bbox(locs$geometry) |> expand_bbox(5)
+  if(is.null(pal)){ pal <- get_palette(years = locs$y) }
+ 
+  if(is.null(title)){ title <-  "Distribution of tracking data in space" }
   
-  pal <- get_palette(years = locs$y)
-
+  locs <- sf::st_as_sf(locs, coords = coord_cols, crs = crs)
+  
+  ns_bbox <- sf::st_bbox(locs$geometry) |> expand_bbox(exp_deg)
+  
   # main plot
   mm <- ggplot() + 
     geom_sf(data = world, fill = "white") + 
@@ -521,8 +555,7 @@ plot_on_world_map <- function(steps, crs = sf::st_crs(4326), pal = NULL){
     ) +
     coord_sf(xlim = c(-180, 180), ylim = c(-90, 90), expand = F) +
     theme_void() +
-    labs(
-      title = "Distribution of tracking data in space") +
+    labs(title = title) +
     theme(
       plot.margin = margin(0, 0, 0, 0, unit = "cm"), 
       panel.spacing = unit(0, "cm"), 

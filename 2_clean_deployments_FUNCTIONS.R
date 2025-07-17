@@ -1,7 +1,14 @@
+#' ---
+#' title: "Function used in the script download_movebank.R"
+#' output: github_document
+#' ---
 
+# needs:
 library(DescTools)
 library(data.table)
 library(amt)
+
+# INFO --------------------------------------------------------------------
 
 #' **FUNCTION: detect_track_problems**
 #' protocol for detecting following track problems:
@@ -149,55 +156,20 @@ detect_track_problems <- function(
 
 summarize_track_problems <- function(
     track, time_col = "timestamp",
-    save_cleaned_track = T, fout = NULL,
     cols_cleaned_track = NULL
     ){
 
-  if(is.null(fout)){ stop("Provide a file path for the cleaned track!") }
-  
   # summarize the track problems and their duration
   track_summarized <- track[, .(
     track_start = min(get(time_col), na.rm = T),
     track_end = max(get(time_col), na.rm = T),
     track_unique_days = uniqueN(as.Date(get(time_col)), na.rm = T),
     n_locs = .N
-  ), by = .(track_problem, sensor_type_id)
+  ), by = track_problem
   ][
-    , track_period_days := round(
+   , track_period_days := round(
       difftime(track_end, track_start, units = "days"), 2)
   ]
-
-    
-
-  if(save_cleaned_track){
-
-   track <- track[track_problem %in% c(NA, "")]
-   
-   # select output columns
-   if(!is.null(cols_cleaned_track)){ track <- track[, ..cols_cleaned_track] }
-  
-   # if there is more than 3 locations, save the track
-   if(nrow(track) > 3){
-
-     track <- track |>
-       make_track(
-         x, y, timestamp,
-         crs = st_crs(4326),
-         all_cols = TRUE
-       )
-     
-     saveRDS(track, file = fout, compress = F)
-
-     track_summarized <- track_summarized[, saved := T][, file := fout]
-
-   } else {
-     
-     # report if the track was saved or not
-     track_summarized <- track_summarized[, saved := F][, file := NA]
-     
-   }
-  
-  }
 
   return(track_summarized)
 
@@ -259,11 +231,11 @@ find_duplicated_tracks <- function(
   
   if(keep_criteria == "locations") {
     
-    df <- df[, n_locs := get("n_locs")]
-    
     if(is.null(n_locs)){ 
       stop("Provide a column name for the number of locations!")
     }
+    
+    df <- df[, n_locs := get(n_locs)]
     
     # Define which tracks to exclude
     overlapping[, `:=`(

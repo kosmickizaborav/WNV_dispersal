@@ -1,5 +1,5 @@
 #' ---
-#' title: "Function used in the script download_movebank_datatable.R"
+#' title: "Function used in the script download_movebank.R"
 #' output: github_document
 #' ---
 
@@ -23,7 +23,7 @@
 #' >>> OUTPUT: data.table with study metadata with the reference account
 #' 
 #' **FUNCTION 2: download_deployment_metadata**
-#' wrapping the function Movebank_download_deployment(), if error occurs log
+#' wrapping the function movebank_download_deployment(), if error occurs log
 #' the error message. 
 #' 1 - download deployments from all the studies provided in the input 
 #'     data.table, log error message if error occurred
@@ -42,23 +42,21 @@
 #' **FUNCTION 3: download_individual_deployments**
 #' function that wraps all the steps needed when downloading deployments.
 #' wraps movebank_download_study(), and downloads the data using study_id, 
-#' individual_id, and deployment_id from the deployment metadata.
-#' saves the track in the original movebank format and returns the deployment 
-#' information and the data status:
+#' individual_id, and deployment_id from the deployment metadata and saves it 
+#' to the designated files
 #' - if an error occurred, returns the error message
 #' - if no error occurred but no data available to save, annotate it
 #' - if data available, save it and return file name
 #' >>> INPUT:
-#' 1 - depinf - data.table with deployment metadata, must contain account, 
+#' 1 - deploy_info - data.table with deployment metadata, must contain account, 
 #'     study_id, individual_id, deployment_id, and species_col (species name)
-#' 2 - species_col - character, column name with species names in depinf
+#' 2 - species_col - character, column name with species names in deploy_info
 #' 3 - tag_ids - character vector with sensor type names,
 #' 4 - studies_dir - character, directory to save the studies
-#' 5 - sub_dir - character, sub-directory to save the studies, if NA, saves in the
-#'     studies_dir
+#' 5 - sub_dir - character, sub-directory to save the studies, if NA, 
+#'     saves in the studies_dir
 #' >>> OUTPUT: 
 #' 1 - deployments saved in the respective species folders
-#' 2 - data.table with deployment download status
 
 # FUNCTION: download_study_metadata ---------------------------------------
 
@@ -311,17 +309,19 @@ download_individual_deployments <- function(
 
   depinf <- copy(deploy_info)
 
+  # name output file
   depinf[, file := paste0(
     study_id,  "_stu_", individual_id, "_ind_", deployment_id, "_dep", ".rds")]
   depinf[, fout := file.path(
     studies_dir, gsub(" ", "_", get(species_col)), sub_dir, file)]
 
+  # check if it's already downloaded
   depinf[, downloaded_before := file.exists(fout) |
       file.exists(gsub(".rds", "_error.rds", fout))]
   depinf[, file := NULL]
 
+  # continue only with the deployments that are not downloaded
   depinf <- depinf[downloaded_before == F]
-
   total <- nrow(depinf)
 
   if(total == 0){
@@ -334,16 +334,8 @@ download_individual_deployments <- function(
     message(sprintf("\nDownloading track %d of %d!", i, total))
     
     drow <- depinf[i,]
-
-    # acc <- dep_row$account
-    # pw <- key_get(
-    #   service = acc, 
-    #   username = key_list()$username[which(key_list()$service == acc)])
-    
-    # callr::r(function(drow, tag_ids, movebank_acc, movebank_pw){
-      
-      options(move2_movebank_user = drow$account)
-      #options(move2_movebank_password = as.character(movebank_pw))
+   
+    options("move2_movebank_key_name" = drow$account)
       
       file_path <- drow$fout
       
@@ -360,7 +352,7 @@ download_individual_deployments <- function(
             attributes = "all"
           ) |> 
             dplyr::select(where(~!all(is.na(.)))),
-          timeout = 3000,
+          timeout = 600,
           onTimeout = "error"
         )
         
@@ -385,11 +377,6 @@ download_individual_deployments <- function(
         rm(drow)
         
       })
-      
-      # }, 
-      # args = list(
-      #   drow = dep_row, tag_ids = tag_ids, 
-      #   movebank_acc = acc, movebank_pw = pw)) 
     
     gc(verbose = F)
       

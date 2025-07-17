@@ -1,9 +1,9 @@
-library(here)
-library(tidyverse)
-library(readxl)
+library(data.table)
 library(FlyingR)
+library(afpt)
+source("0_helper_functions.R")
 
-dir <-  here("Published_data")
+pub_dir <- here::here("Published_data")
 
 
 # ALL FUNCTIONS ARE RAN BEFORE i SWITCHED TO DATATABLE, SO THEY ARE COMMETED
@@ -127,127 +127,290 @@ dir <-  here("Published_data")
 # 
 # 
 # # 2 - Bird speeds from literature -----------------------------------------
-# 
-# # function for checking birdnames
-# source(here("0_helper_functions.R"))
-# 
-# alerstam_file <- "Alerstam_2007_supplement_table_extracted_automatic.xlsx"
-# bruderer_file <- "Bruderer_2001_extracted_manual.xlsx"
-# 
-# alerstam_df <- file.path(dir, alerstam_file)|> 
-#   read_xlsx(skip = 1) |> 
-#   select(2:4, 6) |> 
-#   rename_with(~c("species", "speed", "sd", "n_tracks"), everything()) |> 
-#   filter(!str_detect(species, "•")) |> 
-#   mutate(
-#     species = if_else(species == "Delichon urbica", "Delichon urbicum", species)
-#   ) |> 
-#   rename_to_birdlife(species, add_phylo = T) |> 
-#   filter(!is.na(birdlife_name)) |> 
-#   relocate(all_of(c("speed", "sd", "n_tracks")), .after = last_col()) |> 
-#   select(-species, -name_type) |> 
-#   mutate(source = "Alerstam2007")
-# 
-# bruderer_df <- file.path(dir, bruderer_file) |> 
-#   read_xlsx() |> 
-#   rename_to_birdlife(species, add_phylo = T) |> 
-#   select(-species, -name_type) |> 
-#   mutate(source = "Bruderer2001")
-# 
-# bird_speeds <- alerstam_df |> 
-#   bind_rows(bruderer_df) |> 
-#   rename(scientific_name = birdlife_name) |> 
-#   write_csv(file.path(dir, "00_bird_speed_literature.csv"))
-# 
-# 
-# 
-# # 3 - Speed limits wingspan --------------------------------------------------
-# 
-# birdwing <- file.path(dir, "BirdWingData_tidy_ver2.1.csv")|> 
-#   read_csv(show_col_types = F) |> 
-#   janitor::clean_names() |> 
-#   rename(species = species_ioc13_1) |> 
-#   rename_to_birdlife(str_squish(species)) |> 
-#   add_birdlife_phylogeny(species_name = "birdlife_name") |> 
-#   filter(!is.na(birdlife_name)) |> 
-#   mutate(
-#     sex = case_when(
-#       sex == "F" ~ "f", 
-#       sex == "M" ~ "m", 
-#       .default = NA
-#     )
-#   ) |> 
-#   select(
-#     birdlife_name, order, wingspan_m, wing_area_m2, 
-#     body_mass_g, def_span, def_area, sex
-#   ) |>  
-#   filter(if_all(contains("wing"), ~!is.na(.))) |> 
-#   filter(!(def_span == "B-I" | def_area %in% c("B-I", "B?-I?"))) |> 
-#   filter(!if_any(-sex, is.na)) |> 
-#   mutate(
-#     bodymass = body_mass_g/1000,
-#     muscle_mass = bodymass*0.17,
-#     fat_mass = bodymass*0.33, 
-#     order = if_else(order == "Passeriformes", 1, 2)
-#   ) |> 
-#   rename(
-#     name = birdlife_name, wingspan = wingspan_m, wingarea = wing_area_m2
-#   ) |> 
-#   select(
-#     name, sex, bodymass, wingspan, fat_mass, order, wingarea, muscle_mass
-#   ) |> 
-#   write_csv(file.path(dir, "00_bird_wing_data.csv"))
-#   
-# speedsym <- migrate(file = file.path(dir, "00_bird_wing_data.csv"))
-# 
-# birdwing_speeds <- birdwing |> 
-#   bind_cols(
-#     tibble(
-#       range = speedsym$range,
-#       body_mass_out = speedsym$bodyMass,
-#       fat_mass_out = speedsym$fatMass,
-#       muscle_mass_out = speedsym$muscleMass,
-#       start_min_speed = speedsym$startMinSpeed,
-#       end_min_speed = speedsym$endMinSpeed
-#     )
-#   ) |> 
-#   write_csv(file.path(dir, "00_bird_wing_data_speed_raw.csv"))
-# 
- birdwing_speeds <- file.path(dir, "00_bird_wing_data_speed_raw.csv") |> 
-   read_csv(show_col_types = F)
 
-birdlife <- file.path(dir, "00_birdlife_classification.csv") |>  
-  read_csv(show_col_types = F)
+f_literature <- "00_bird_speed_literature.csv"
 
-birdwing_speeds <- birdwing_speeds |> 
-  janitor::clean_names() |> 
-  rename(scientific_name = name)
-
-birdwing_speeds |>
-  select(-sex) |> 
-  summarize(across(everything(), ~mean(.)), .by = scientific_name) |> 
-  bind_rows(
-    birdwing_speeds |> 
-      filter(!is.na(sex)) |> 
-      summarize(
-        across(everything(), ~mean(.)), 
-        .by = c(scientific_name, sex)
-      )
-  ) |> 
-  mutate(across(contains("speed"), ceiling)) |> 
-  select(-order) |> 
-  left_join(
-    birdlife |> distinct(scientific_name, family, order), 
-    by = "scientific_name"
-  ) |> 
-  write_csv(file.path(dir, "00_bird_wing_data_speed_mean.csv"))
+if(!file.exists(file.path(pub_dir, f_literature))){
+  
+  # ALERSTAM 2007
+  alerstam_file <- "Alerstam_2007_supplement_table_extracted_automatic.xlsx"
+  
+  # file 1 - extracted automatically from the paper using adobe convertor
+  alerstam_dt <- readxl::read_xlsx(file.path(pub_dir, alerstam_file), skip = 1)
+  # convert to dt
+  alerstam_dt <- setDT(alerstam_dt)[, c(2:4, 6)]
+  colnames(alerstam_dt) <- c("species", "speed", "sd", "n_tracks")
+  
+  # remove the values that are citations from the other paper
+  alerstam_dt <- alerstam_dt[!grepl("•|Mean", species)]
+  
+  # rename to birdlife
+  alerstam_dt[species == "Delichon urbica", species := "Delichon urbicum"]
+  alerstam_dt <- rename_to_birdlife(alerstam_dt, species_name = "species")
+  
+  alerstam_dt[, name_type := NULL][, source := "Alerstam2007"]
+  
+  
+  # BRUDERER 2001  
+  bruderer_file <- "Bruderer_2001_extracted_manual.xlsx"
+  
+  bruderer_dt <- readxl::read_xlsx(file.path(pub_dir, bruderer_file))
+  setDT(bruderer_dt)
+  
+  bruderer_dt <- rename_to_birdlife(bruderer_dt, species_name = "species")
+  
+  bruderer_dt[, source := "Bruderer2001"][, name_type := NULL]
+  
+  bird_speeds <- rbindlist(
+    list(alerstam_dt, bruderer_dt), use.names = T, fill = T)
+  
+  
+  fwrite(bird_speeds, file.path(pub_dir, f_literature))
+  
+  
+}
 
 
+# 3 - Prepare wingspan data -----------------------------------------------
+
+# prepare windspan database
+f_wingspan_c <- "00_bird_wing_data_complete.csv"
+
+if(!file.exists(file.path(pub_dir, f_wingspan_c))){
+ 
+  # get mass estimates for birds in case the wingspan is missing
+  avonet <- readxl::read_xlsx(
+    file.path(pub_dir, "AVONET1_Birdlife.xlsx"), sheet = 2) |> 
+    janitor::clean_names() 
+  avonet <- setDT(avonet)[, .(species1, mass_avonet = mass)]
+  avonet <- rename_to_birdlife(avonet, species_name = "species1")
+  avonet <- avonet[, .(birdlife_name, mass_avonet)][!is.na(birdlife_name)]
+  
+  birdwing <- fread(file.path(pub_dir, "BirdWingData_tidy_ver2.1.csv"))
+  
+  
+  # selecing the columns of interest and renaming them
+  cols_interest <- c("Species_IOC13.1", "Sex", "Adult_Juvenile", "wingspan_m", 
+                     "wing.area_m2", "body.mass_g", "def_span", "def_area")
+  
+  birdwing <- birdwing[, ..cols_interest]
+  
+  setnames(birdwing, old = cols_interest, 
+           new = c("species", "sex", "adult_juvenile", "wingspan_m", "wingarea_m2", 
+                   "bodymass_g", "def_span", "def_area"))
+  
+  birdwing[, species := squish_base(species)]
+  birdwing[, sex := tolower(sex)]
+  
+  
+  # add birdlife classification
+  birdwing <- rename_to_birdlife(birdwing, species_name = "species")
+  birdwing <- birdwing[!birdlife_name %in% c(NA, "")]
+  
+  birdwing <- add_birdlife_phylogeny(birdwing, species_name = "birdlife_name") 
+  
+  # A-II: The length of the body between the two wings was included; two wings  
+  # A-I: The length of the body between the two wings was included; ONE wing  
+  # B-II: The length of the body between the two wings was NOT included; two wings
+  # B-I: The length of the body between the two wings was NOT included; ONE wing
+  # 
+  # filter the data to include only the relevant definitions of wingspan and area
+  # A-I not in the data, that is why not selected
+  birdwing <- birdwing[def_span %in% c("B-II", "A-II", "B-I") & 
+                         def_area %in% c("B-II", "A-II", "B-I")]
+  
+  # adjust if measurements included only one wing
+  birdwing <- birdwing[def_span == "B-I", ':=' (
+    wingspan_m = 2*wingspan_m, 
+    def_span = "B-I x2")]  
+  birdwing <- birdwing[def_area == "B-I", ':=' (
+    wingarea_m2 = 2*wingarea_m2, 
+    def_area = "B-I x2")]
+  
+  birdwing <- unique(birdwing)
+  
+  # add avonet values for mass
+  birdwing <- merge(birdwing, avonet, by = "birdlife_name")
+  
+  birdwing <- melt(
+    birdwing, 
+    measure.vars = c("bodymass_g", "mass_avonet"),
+    variable.name = "mass_type",
+    value.name = "mass")
+  
+  
+  birdwing[, mass_type := fifelse(
+    grepl("avonet", mass_type), "avonet", "wingdata")]
+  birdwing <- birdwing[mass_type == "avonet", sex := NA]
+  
+  # required mass in kg
+  birdwing[, mass := mass / 1000]  # convert to kg
+  
+  setnames(
+    birdwing, 
+    old = c("wingspan_m", "wingarea_m2"), 
+    new = c("wingspan", "wingarea"))
+  
+  fwrite(birdwing, file.path(pub_dir, f_wingspan_c))
+  
+}
 
 
-# 3 - Traits --------------------------------------------------------------
+# 4- Speed estimates - flyingR -----------------------------------------------
+
+flyR_speed_raw <- "00_bird_wing_data_speed_flyingR_raw.csv"
+flyR_wingspan <- "00_bird_wing_data_for_flyingR.csv"
+
+if(!file.exists(file.path(pub_dir, flyR_speed_raw))){
+  
+  # WINGSPAN FOR FLYING R 
+  birdwing <- fread(file.path(pub_dir, f_wingspan_c))
+  
+  # 17% - default from the flight program
+  birdwing[, muscle_mass := mass * 0.17]  
+  # there is no difference in min start speed based on the fat fraction
+  # so i just set one
+  birdwing[, fat_mass := mass*0.33] 
+  birdwing[, order := fifelse(order == "Passeriformes", 1, 2)]
+  
+  setnames(
+    birdwing, old = c("birdlife_name", "mass"), new = c("name", "bodymass"))
+  
+  birdwing[, name := paste(name, mass_type, sep = "_")]
+  
+  # keep only necessary columns
+  birdwing <- birdwing[
+    , .(name, sex, bodymass, wingspan, fat_mass, order, wingarea, muscle_mass)]
+  
+  fwrite(birdwing, file.path(pub_dir, flyR_wingspan))
+  
+  # get the speeds
+  speedsym <- migrate(file = file.path(pub_dir, flyR_wingspan))
+  
+  # save results with speeds 
+  speedsym <- cbind(
+    birdwing,
+    start_min_speed = speedsym$startMinSpeed, 
+    end_min_speed = speedsym$endMinSpeed, 
+    range = speedsym$range
+  )
+  
+  fwrite(speedsym, file.path(pub_dir, flyR_speed_raw))
+  
+}
 
 
+# 5 - Speed estimates - afpt --------------------------------------------------
+
+afpt_speed_list <- "00_speed_estimates_afpt_list.rds"
+afpt_speed_dt <- "00_bird_wing_data_speed_afpt.csv"
+
+if(!file.exists(file.path(pub_dir, afpt_speed_list))){
+  
+  seabird_families <- c("Spheniscidae", "Diomedeidae", "Procellariidae", 
+                        "Hydrobatidae", "Oceanitidae", "Pelecanoididae", 
+                        "Phaethontidae", "Pelecanidae", "Phalacrocoracidae", 
+                        "Sulidae", "Fregatidae", "Stercorariidae", "Laridae", 
+                        "Rynchopidae", "Alcidae")
+  
+  
+  birdwing <- fread(file.path(pub_dir, f_wingspan_c))
+  birdwing <- birdwing[
+    , .(birdlife_name, wingspan, wingarea, mass, mass_type, order, family)]
+  
+  birdwing[, type := fcase(
+    order == "Passeriformes", "passerine",
+    family %in% seabird_families, "seabird",
+    default = "other")]
+  
+  
+  speed_list <- lapply(seq(nrow(birdwing)), function(i){
+    
+    birdo <- Bird(
+      massTotal = birdwing$mass[i],
+      wingSpan = birdwing$wingspan[i],
+      wingArea = birdwing$wingarea[i],
+      name.scientific = birdwing$name[i],
+      name = paste(birdwing$name[i], birdwing$mass_type[i], sep = "_"),
+      type = birdwing$type[i]
+    )
+    
+    computeFlightPerformance(birdo)
+    
+  })
+  
+  saveRDS(result_list, file = file.path(pub_dir, afpt_speed_list))
+  
+  speed_dt <- rbindlist(lapply(seq_along(speed_list), function(i){
+    
+    birdwing[i, ][, max_speed := speed_list[[i]]$table$speed[4]]
+    
+  }), fill = T)
+  
+  fwrite(speed_dt, file.path(pub_dir, afpt_speed_dt))
+  
+}
 
 
+# 6 - Summary speed -------------------------------------------------------
+
+# in the edn chosen afpt because the vales seem the most reasonable for the 
+# maximum speed distribution
+
+birdwing <- fread(file.path(pub_dir, f_wingspan_c))[
+  , species := NULL][, name_type := NULL]
+
+sp_afpt <- fread(file.path(pub_dir, afpt_speed_dt))[, .(type, max_speed)]
+
+bspeed <- cbind(birdwing, sp_afpt)
+
+# mean by scientific_name, ignoring sex
+bspeed <- bspeed[
+  , lapply(.SD, mean, na.rm=TRUE), 
+  .SDcols = c("max_speed", "wingspan", "wingarea", "mass"), 
+by = .(birdlife_name, family, order, type)]
+
+bspeed[, speed := ceiling(max_speed)]
+setnames(bspeed, old = "birdlife_name", new = "scientific_name")
+
+fwrite(bspeed, file.path(pub_dir, "00_bird_wing_data_speed_mean.csv"))
+
+
+# Traits ------------------------------------------------------------------
+
+#' #' AVONET:
+#' #' - migration:
+#' #'   1 = Sedentary.
+#' #'   2 = Partially migratory - minority of population migrates long distances,
+#' #'   or most of population undergoes short-distance migration,
+#' #'   nomadic movements, distinct altitudinal migration, etc.
+#' #'   3 = Migratory - majority of population undertakes long-distance migration
+avonet <- setDT(readxl::read_xlsx(
+  file.path(here::here("Published_data", "AVONET1_Birdlife.xlsx")), sheet = 2))[
+  , .(sp_avonet = Species1, migration = Migration)]
+
+avonet <- rename_to_birdlife(avonet, species_name = "sp_avonet")[
+  , name_type := NULL]
+avonet <- avonet[!is.na(birdlife_name)]
+
+# ELTON
+elton <- fread(here::here("Published_data", "BirdFuncDat.txt"))[
+  , .(sp_elton = Scientific, nocturnal = Nocturnal)]
+elton <- rename_to_birdlife(elton, species_name = "sp_elton")[
+  , name_type := NULL]
+
+elton <- elton[!is.na(birdlife_name)][
+  , nocturnal := fifelse(sp_elton == "Nycticorax nycticorax", 1, nocturnal)]
+
+# combine
+traits <- merge(avonet, elton, by = "birdlife_name", all = T)
+
+traits[, migration_txt := fcase(
+  migration == 1, "sedentary", 
+  migration == 2, "partially migratory", 
+  migration == 3, "migratory", 
+  default = NA_character_
+)]
+
+fwrite(traits, file.path(pub_dir, "00_bird_traits.csv"))
 

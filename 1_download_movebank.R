@@ -1,13 +1,13 @@
 #' ---
-#' title: "Download movebank datatable"
+#' title: "Download Movebank data"
 #' output: github_document
 #' ---
 
 # INFO --------------------------------------------------------------------
 #' **SECTION 0 - Define parameters and packages**
-#' the species of interest are all the species that in the global database 
-#' of WNV prevalence have a group prevalence > 0. furthermore in this section
-#' we define the file names of the outputs. 
+#' the species of interest are all the bird species. later we focused on the 
+#' species that in the global database of WNV prevalence have a 
+#' group prevalence > 0.
 #'  
 #' **SECTION 1 - Download study metadata** 
 #' access all studies from different accounts and filter studies that:
@@ -33,12 +33,12 @@
 #' This step was done after seeing how taxon is specified in the selected study, 
 #' so it might not include all the options when adding new studies. 
 #' filter deployments that include:
-#' 1 - species of interest specified under target_sp
+#' 1 - species of interest
 #' 2 - sensor type of interest
 #' 3 - no manipulation with the tracked animal or animal relocated
 #' after inspecting the manipulation comments, we excluded some of the studies 
-#' that seem to have correct manipulation_type incorrectly specified. we 
-#' changed it according to the manipulation_comments - detected problematic 
+#' that seem to have manipulation_type incorrectly specified. we changed it 
+#' according to the manipulation_comments - detected problematic 
 #' manipulation comments:
 #'   - 1. relocated and released for trials; for 2 trials was treated 
 #'    to shift light cycle
@@ -56,10 +56,11 @@
 #'     in case the animal was restricted
 #' >>> OUTPUT: file_dep_filter
 #' 
-#' **SECTION 4 - Download individual deployments**
-#' Using account, study_id, individual_id, deployment_id, download individual
-#' deployments of interest, and save them in a separate folder per species. In
-#' case an error occurs while downloading, log the error message. 
+#' **SECTION 4 - Download deployments**
+#' Using account, study_id, individual_id, deployment_id, we downloaded
+#' individual deployments of interest, and save them in a separate folder per
+#' species. In case an error occurs while downloading, the message was logged. 
+#' the overview of all downloaded deployments is provided in download report.  
 #' >>> OUTPUT: file_down_report
 
 # 0 - Define parameters and packages--------------------------------------------
@@ -68,7 +69,7 @@ library(data.table)
 library(move2)
 library(keyring)
 source("0_helper_functions.R")
-source("1_download_movebank_datatable_FUNCTIONS.R")
+source("1_download_movebank_FUNCTIONS.R")
 
 keyring_unlock("system")
 
@@ -76,6 +77,7 @@ keyring_unlock("system")
 data_dir <- here::here("Data")
 if (!dir.exists(data_dir)) dir.create(data_dir)
 
+# get all birdlife names available
 birdlife <- fread(
   here::here("Published_data", "00_birdlife_classification.csv"))[
     , .(scientific_name, synonym, sp_status, family, order)]
@@ -109,18 +111,14 @@ birdlife <- melt(
 # 
 # rm(sp_to_check, WNV_prevalence, target_sp_birdlife)
 
-# OUTPUT FILES
-file_stu <- "1_downloadable_studies.csv"
-file_dep_all <- "1_downloadable_studies_deployments.csv"
-file_dep_filter <- "1_deployments_to_download.csv"
-file_down_report <- "1_download_report.csv"
-
-
 # 1 - Download study metadata---------------------------------------------------
+
+# OUTPUT FILE
+file_stu <- "1_downloadable_studies.csv"
 
 if (!file.exists(file.path(data_dir, file_stu))) {
   
-  # movebank Accounts
+  # movebank accounts
   movebank_access <- c("movebank", "rbook_account", "kosmickizaborav")
   
   studies <- download_study_metadata(
@@ -135,15 +133,20 @@ if (!file.exists(file.path(data_dir, file_stu))) {
 
 # 2 - Download deployment metadata ---------------------------------------------
 
+# OUTPUT FILE
+file_dep_all <- "1_downloadable_studies_deployments.csv"
+
 # Check if deployment file exists
 if (!file.exists(file.path(data_dir, file_dep_all))) {
   
   studies <- fread(file.path(data_dir, file_stu))[, .(id, account, taxon_ids)]
   
-  # getting the taxon specification for the study
+  # getting the taxon specification for the study, 
+  # make a longer dt separating each taxon id in a row
   studies <- studies[
     , .(taxon_id = unlist(strsplit(taxon_ids, ","))), by = .(id, account)]
   
+  # get the taxon ids that are in the birdlife classification
   studies <- studies[
     taxon_id %in% birdlife$sci_name | 
       taxon_id %in% birdlife$genus |
@@ -151,6 +154,7 @@ if (!file.exists(file.path(data_dir, file_dep_all))) {
       taxon_id %in% unique(birdlife$order) |
       taxon_id %in% c("Aves", "Animalia")]
   
+  # list of study ids and accounts to use when downloading deployment info
   id_to_download <- unique(studies[, .(id, account)])
   
   # download deployment metadata
@@ -170,6 +174,9 @@ if (!file.exists(file.path(data_dir, file_dep_all))) {
 
 
 # 3 - Filter deployments --------------------------------------------------
+
+# OUTPUT FILE
+file_dep_filter <- "1_deployments_to_download.csv"
 
 if(!file.exists(file.path(data_dir, file_dep_filter))){
   
@@ -238,7 +245,7 @@ if(!file.exists(file.path(data_dir, file_dep_filter))){
 rm(file_dep_all, file_stu)
 
 
-# 4 - Download individual deployments -------------------------------------
+# 4 - Download deployments ----------------------------------------------------
 
 # load the filtered deployments data
 deployments_filtered <- fread(file.path(data_dir, file_dep_filter))[
@@ -262,8 +269,11 @@ download_individual_deployments(
     sub_dir = "1_deployments"
 ) 
 
-# save download report
-# fwrite(download_report, file.path(data_dir, file_down_report))
+
+# 5 - Get download report -------------------------------------------------
+
+# OUTPUT FILE
+file_down_report <- "1_download_report.csv"
 
 # create download report
 down_deps <- list.files(
@@ -271,16 +281,17 @@ down_deps <- list.files(
 
 download_report <- rbindlist(lapply(down_deps, function(f){
   data.table(file = f, downloaded_on = file.mtime(f))}))
-
 # extract species
 download_report[, species := gsub(
   "_", " ", gsub(".*/Studies/(.*?)/1_deployments/.*", "\\1", file))]
-
 # check if downloaded 
 download_report[, error_occured := grepl("_error", file)]
-
 
 error_log <- rbindlist(lapply(
   grep("error", down_deps, value = T), function(f){
     readRDS(f)[, .(file = f, error_message = error)]}))
-                          
+
+download_report <- merge(download_report, error_log, by = "file", all.x = T)
+
+# save download report
+fwrite(download_report, file.path(data_dir, file_down_report))

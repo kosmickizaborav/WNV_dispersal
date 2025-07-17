@@ -1,5 +1,5 @@
 #' ---
-#' title: "5_0_distance_functions"
+#' title: functions used in script 6 distance
 #' output: github_document
 #' ---
 
@@ -74,8 +74,8 @@ add_day_cycle <- function(track, day_limits = NULL, add_day_limits = F){
   
   track <- cbind(track, sun_times_df[, ..day_limits])[
     !is.na(get(day_limits[1])) & !is.na(get(day_limits[2]))]
-  setorder(track, t_)
   
+  setorder(track, t_)
   
   if(nrow(track) == 0){
     
@@ -152,17 +152,19 @@ get_dcp_dist <- function(
   
   # Split into groups for each dcp
   # Group by dcp and calculate summaries
-  # HERE WE SHOULD REMOVE t_min and t_max if there is only one point
-  dcp_median <- track_dt[, .(
-      n_locs = first(n_locs),
-      x_median = median(x_),
-      y_median = median(y_),
-      t_median = median(t_),
-      t_min = min(t_),
-      t_max = max(t_)
-    ), by = c("day_cycle", "day_period")][
-      ,  t_span := fifelse(
-        n_locs > 1, difftime(t_max, t_min, units = "hours", tz = "UTC"), NA)]
+  dcp_median <- track_dt[, c(
+      list(n_locs = first(n_locs)),
+      list(
+        x_median = median(x_),
+        y_median = median(y_),
+        t_median = median(t_)
+      ),
+      if(.N == 1) list(t_min = NA_real_, t_max = NA_real_)
+      else list(t_min = min(t_), t_max = max(t_))
+    ), by = .(day_cycle, day_period)]
+  
+  dcp_median[,  t_span := fifelse(
+      n_locs > 1, difftime(t_max, t_min, units = "hours", tz = "UTC"), NA)]
   
   dcp_distance <- track_dt[
     , if(unique(n_locs) > 1) calculate_distances(.SD),  
