@@ -128,7 +128,7 @@ get_dcp_dist <- function(
     
   } 
   
-  if(is.null(track)){ return(data.table(day_period_distance_available = T)) }
+  if(is.null(track)){ return(data.table(day_period_distance_available = F)) }
   
   # making a copy of data so that it is not directly modified
   track_dt <- copy(track)
@@ -190,7 +190,7 @@ get_sleep_steps <- function(
     day_limits = NULL
 ){
   
-  no_result <- data.table(dcp_steps_available = FALSE)
+  no_result <- data.table(sleep_steps_available = FALSE)
   
   track <- track[!is.na(x_) & !is.na(y_)]
   
@@ -226,9 +226,11 @@ get_sleep_steps <- function(
     # Calculate the distances using st_distance
     steps[
       , sl_ := sf::st_distance(geometry_1, geometry_2, by_element = T)][
-        , dt_ := difftime(t2_, t1_, units = "hours")][
-          , dcp_steps_available := TRUE][
-            , c("geometry_1", "geometry_2") := NULL]
+        , dt_ := difftime(t2_, t1_, units = "hours")]
+    
+    steps[
+      , sleep_steps_available := TRUE][
+      , c("geometry_1", "geometry_2") := NULL]
     
     return(steps)
     
@@ -374,6 +376,51 @@ add_worldmap_data <- function(
   return(steps)
   
 }
+
+
+
+# FUNCTION: add_continent -------------------------------------------------
+
+add_continents <- function(
+    steps, crs = sf::st_crs(4326), align_start = T, 
+    coord_cols = NULL, scale = "medium"){
+  
+  # overlay the map with start or the end point of the step (didn't check both
+  # to preserve the country information in case we need it later)
+  if(is.null(coord_cols)){
+    coord_cols <- if(align_start) c("x1_", "y1_") else c("x2_", "y2_")
+  }
+  
+  steps <- steps[
+    , geometry := sf::st_as_sf(
+      .SD, coords = coord_cols, crs = crs), .SDcols = coord_cols] 
+  
+  # load or download the continent data with the right resolution
+  conti <- tryCatch(
+    rnaturalearth::ne_load(
+      type = "geography_regions_polys",  scale = scale, category = "physical"), 
+    error = function(e) {
+      rnaturalearth::ne_download(
+        type = "geography_regions_polys",  scale = scale, category = "physical")
+    }
+  )
+  
+  # check the nearest geometry
+  conti_id <- sf::st_nearest_feature(steps$geometry, conti)
+  
+  # convert to datatable for merging
+  conti_dt <- as.data.table(conti)[
+    , .(continent = REGION, subregion = SUBREGION)]
+  conti_dt <- conti_dt[conti_id]
+  
+  # add columns to the original step data
+  steps <- cbind(steps[, geometry := NULL], conti_dt)
+  
+  return(steps)
+  
+}
+
+
 
 # FUNCTION 6: get_month_limits -----------------------------------------------
 

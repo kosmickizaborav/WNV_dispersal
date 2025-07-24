@@ -11,7 +11,8 @@ library(data.table)
 library(sf)
 library(dbscan)
 library(ggplot2)
-# source("6_distance_datatable_FUNCTIONS.R")
+#source("6_distance_FUNCTIONS.R")
+source("6_distance_PLOT_FUNCTIONS.R")
 # source("0_helper_functions.R")
 
 # OUTPUT directories -------------------------------------------------------
@@ -24,12 +25,18 @@ graphs_dir <- file.path(data_dir, "Graphs")
 # DATA OUTPUT
 # directories with median distances
 dist_dirs <- file.path(list.files(study_dir, full.names = T), "6_distances")
-sleep_dirs <- gsub("6_distances$", "7_sleep_spots", dist_dirs)
+sleep_dirs <- gsub("6_distances$", "7_sleep_clusters", dist_dirs)
 invisible(lapply(sleep_dirs, dir.create, showWarnings = F))
 
 # PLOT OUTPUT
-plots_dir <- file.path(graphs_dir, "7_sleep_spots")
+plots_dir <- file.path(graphs_dir, "7_sleep_clusters")
 dir.create(plots_dir, showWarnings = F)
+
+
+# plot_subfolders <- c(
+#   "2_distances_between_sleep_spots",  "4_sleep_spots_visualization")
+# invisible(lapply(plot_subfolders, function(f){
+#     dir.create(file.path(plots_dir, f), showWarnings = F)}))
 
 # Create folder names from day_limits
 dl_folders <- c("nightEnd_night", "nauticalDawn_nauticalDusk", "dawn_dusk")
@@ -59,31 +66,35 @@ crs <- st_crs(4326)
 
 # 1 - Classify sleep spots -------------------------------------------------------
 
+# problesm: strnus vulgaris, streptopellia turtur, phoeniconaias minor, 
+# bubulcus ibis, mergus merganser
+
 # listing all dcp files
 files <- list.files(dist_dirs, 
   pattern = "1_all_tracks_dcp_distances.*continent.rds", full.names = T)
 
 spots_files <- gsub(
-  "6_distances", "7_sleep_spots", 
+  "6_distances", "7_sleep_clusters", 
   gsub("dcp_distances", "dcp_sleep_spots", files))
 
-files <- files[!file.exists(spots_files)]
+files <- files[!(file.exists(spots_files) | 
+      file.exists(gsub(".rds", "_nodata.rds", spots_files)))]
 nf <- length(files)
-rm(sspots_files)
+rm(spots_files)
 
 if(nf > 0){
   
   # only columns of interest
   cols_of_interest <- c(
     "day_cycle", "day_period", "x_median", "y_median", "t_median", 
-    "file", "continent", "country", "country_admin")
+    "file", "continent", "subregion")
   
   lapply(seq_along(files), function(n){
     
     fin <- files[n]
     
     fout <- gsub(
-      "6_distances", "7_sleep_spots", 
+      "6_distances", "7_sleep_clusters", 
       gsub("dcp_distances", "dcp_sleep_spots", fin))
     
     sp <- gsub(".*/Studies/(.*)_(.*)/6_distances/.*", "\\1 \\2", fin)
@@ -94,10 +105,20 @@ if(nf > 0){
     # load the data
     dcp_locs <- fread(fin)
     
+    dcp_locs <- dcp_locs[, ..cols_of_interest]
+    
+    if(!any(dcp_locs$day_period == sleep_time)){
+      
+      fout <- gsub(".rds", "_nodata.rds", fout)
+      
+      fwrite(dcp_locs, fout)
+      
+      return(NULL)
+      
+    }
+    
     # subsetting dcp just for the sleeping points
-    dcp_locs <- dcp_locs[, ..cols_of_interest][day_period == sleep_time]
-    # just in case
-    dcp_locs <- dcp_locs[!is.na(x_median) & !is.na(y_median)]
+    dcp_locs <- dcp_locs[day_period == sleep_time]
     
     # group by deployment and day_period
     sleeps <- dcp_locs[, {
@@ -161,6 +182,8 @@ if(nf > 0){
     
     fwrite(sleeps, fout)
     
+    
+    
     cat("\nProcessed:", n, "|", nf)
   })
   
@@ -169,200 +192,331 @@ if(nf > 0){
 
 rm(files, nf)
 
-# 2 - Distances within clusters -----------------------------------
+# 2 - Distances within clusters ------------------------------------------------
 
-files <- list.files(sleep_dirs, 
-    pattern = "1_all_tracks_dcp_sleep_spots.*_continent.rds", full.names = T)
+files <- list.files(
+  sleep_dirs, full.names = T,
+  pattern = "1_all_tracks_dcp_sleep_spots.*_continent.rds")
 
 out_files <- gsub("1_all_tracks_dcp_", "2_distances_between_", files)
 
-files <- files[!file.exists(out_files)]
+files <- files[
+  !(file.exists(out_files)|file.exists(gsub(".rds", "_nodata.rds", out_files)))]
 rm(out_files)
 nf <- length(files)
 
-lapply(seq_along(files), function(i){
+if(nf > 0){
   
-  fin <- files[i]
-  fout <- gsub("1_all_tracks_dcp_", "2_distances_between_", fin)
-  
-  spots <- fread(fin)
-  spots[, nclust := .N, by = .(file, method, sleep_cluster)]
-  
-  # keep only clusters with more than 1 point
-  spots <- spots[nclust > 1][, .(
-    file, method, sleep_cluster, 
-    x_median, y_median, day_cycle, continent, country, country_admin,
-    revisit_day_cycle, tracking_gap)]
-  
-  spots <- split(spots, by = c("file", "method", "sleep_cluster"))
-  
-  dist_clust <- rbindlist(lapply(spots, function(dt){
+  lapply(seq_along(files), function(i){
     
+    fin <- files[i]
+    fout <- gsub("1_all_tracks_dcp_", "2_distances_between_", fin)
     
-    if(nrow(dt)){
+    spots <- fread(fin)
+    
+    # keep only clusters with more than 1 point
+    spots <- spots[, .(file, method, sleep_cluster, x_median, y_median,continent)]
+    spots <- spots[, n_locs_clust := .N, by = .(file, method, sleep_cluster)]
+    
+    if(any(spots$n_locs_clust > 1)){
       
-    # convert to sf object for distance calculation
-    sf_pts <- st_as_sf(dt, coords = c("x_median", "y_median"), crs = crs)
+      spots <- spots[n_locs_clust > 1]
+      
+      spots <- split(spots, by = c("file", "method", "sleep_cluster"))
+      
+      dist_clust <- rbindlist(lapply(spots, function(dt){
+        
+        # convert to sf object for distance calculation
+        sf_pts <- st_as_sf(dt, coords = c("x_median", "y_median"), crs = crs)
+        
+        # calculate pairwise distances (returns a matrix in meters if projected CRS)
+        dist_mat <- st_distance(sf_pts)
+        
+        # get lower triangle indices (unique pairs)
+        inds <- which(lower.tri(dist_mat), arr.ind = TRUE)
+        
+        data.table(
+          file = dt$file[1],
+          sleep_cluster = dt$sleep_cluster[1],
+          method = dt$method[1],
+          continent = dt$continent[1],
+          n_locs_clust = dt$n_locs_clust[1],
+          idx1 = inds[,1],
+          idx2 = inds[,2],
+          dist = as.numeric(dist_mat[inds]) # convert units to numeric
+        )
+        
+      }), fill = T)
+      
+      fwrite(dist_clust, fout)
+      
+      rm(dist_clust, spots)
+      
+    } else {
+      
+      nodata_dt <- spots[
+        , .(
+          n_clusters = uniqueN(sleep_cluster), 
+          n_locs = .N), 
+        by = .(file, method)]
+      
+      fwrite(nodata_dt, gsub(".rds", "_nodata.rds", fout))
+      
+      rm(nodata_dt, spots)
+      
+    }
     
-    # calculate pairwise distances (returns a matrix in meters if projected CRS)
-    dist_mat <- st_distance(sf_pts)
+    cat("\nProcessed:", i, "|", nf)
     
-    # get lower triangle indices (unique pairs)
-    inds <- which(lower.tri(dist_mat), arr.ind = TRUE)
-    
-    data.table(
-      file = dt$file[1],
-      sleep_cluster = dt$sleep_cluster[1],
-      method = dt$method[1],
-      idx1 = inds[,1],
-      idx2 = inds[,2],
-      dist = as.numeric(dist_mat[inds]) # convert units to numeric
-    )
-    
-    } 
-    
-  }), fill = T)
+  })
   
-  cat("\nProcessed:", i, "|", nf)
-  
-  fwrite(dist_clust, fout)
-  
-})
+}
 
 
 
-# 3 - Plot distances within clusters ------------------------------------------
+# PLOT 1: Plot distances within clusters --------------------------------------
 
-plots_dir <- file.path(
-  graphs_dir, "7_sleep_spots", "2_distances_between_sleep_spots")
-dir.create(plots_dir, showWarnings = F)
+files <- list.files(sleep_dirs, full.names = T,
+  pattern = "2_distances_between_sleep_spots.*_continent.rds")
 
-files <- list.files(sleep_dirs, 
-  pattern = "2_distances_between_sleep_spots.*_continent.rds", full.names = T)
-
-target_sp <- unique(gsub(".*/Studies/(.*?)/7_sleep_spots/.*", "\\1", files))
-bfiles <- unique(basename(files))
-out_plots <- unlist(lapply(target_sp, function(sp) {
-  file.path(plots_dir, gsub(".rds", paste0("_", sp, ".png"), bfiles))
+out_files <- unlist(lapply(files, function(fin){
+  sp <- gsub(".*/Studies/(.*?)/7_sleep_clusters/.*", "\\1", fin)
+  dl <- gsub(
+    ".*/2_distances_between_sleep_spots_(.*?)_continent.rds", "\\1", fin)
+  pname <- sprintf("1_%s_distances_within_clusters.png", sp)
+  regi <- "World"
+  fout <- file.path(graphs_dir, "7_sleep_clusters", regi, dl, pname)
 }))
 
-files <- files[!file.exists(out_plots)]
+files <- files[!file.exists(out_files)]
 nf <- length(files)
-rm(out_plots, target_sp, bfiles)
+rm(out_files)
 
-lapply(seq_along(files), function(i){
+if(nf > 0){
   
-  fin <- files[i]
-  sp <- gsub(".*/Studies/(.*?)/7_sleep_spots/.*", "\\1", fin)
-
-  fout <- file.path(
-    plots_dir, gsub(".rds", paste0("_", sp, ".png"), basename(fin)))
+  lapply(seq_along(files), function(i){
+    
+    fin <- files[i]
+    sp <- gsub(".*/Studies/(.*?)/7_sleep_clusters/.*", "\\1", fin)
+    dl <- gsub(
+      ".*/2_distances_between_sleep_spots_(.*?)_continent.rds", "\\1", fin)
+    
+    pname <- sprintf("1_%s_distances_within_clusters.png", sp)
+    
+    spots <- fread(fin)
+    # spots[, method := factor(method, levels = c("dbscan", "hclust"))]
+    
+    lapply(regions, function(regi){
+      
+      spot_regi <- copy(spots)
+      
+      if(regi == "Europe"){ spot_regi <- spot_regi[continent == "Europe"] }
+      
+      if(nrow(spot_regi) == 0){ return(NULL) }
+      
+      n_depl <- uniqueN(spot_regi$file)
+      n_clust <- uniqueN(paste0(spot_regi$file, "_", spot_regi$sleep_cluster))
+      
+      pal <- c("dbscan" = "#440154FF", "hclust"	= "#FDE725FF")
+      
+      pp <- spot_regi |> 
+        ggplot() + 
+        geom_histogram(
+          aes(x = dist, fill = method), 
+          alpha = 0.6, bins = 50, #color = "gray44", 
+          position = "dodge"
+        ) + 
+        scale_fill_manual(values = pal) +
+        labs(
+          title = sprintf(
+            "%s, %s - deployments: %d, clusters: %d", 
+            gsub("_", " ", sp), regi, n_depl, n_clust),
+          x = "distance [m]",
+          subtitle = "Distances within sleep clusters"
+        ) +
+        theme_bw() +
+        theme(legend.position = "bottom")
+      
+      max_dt <- spot_regi[
+        , .(dist = max(dist)), by = .(file, sleep_cluster, method)]
+      
+      pmax <- max_dt |> 
+        ggplot() + 
+        geom_histogram(
+          aes(x = dist, fill = method), 
+          alpha = 0.6, bins = 50, # color = "gray44", 
+          position = "dodge"
+        ) + 
+        scale_fill_manual(values = pal) +
+        labs(
+          subtitle = "Maximum distances",
+          x = "distance [m]"
+        ) +
+        theme_bw() +
+        theme(legend.position = "bottom")
+      
+      fout <- file.path(graphs_dir, "7_sleep_clusters", regi, dl, pname)
+      
+      pout <- (pp + pmax) + 
+        plot_layout(guides = "collect") & 
+        theme(legend.position = "bottom")
+      
+      ggsave(filename = fout, plot = pout, width = 17, height = 12, units = "cm")
+      
+      
+      rm(pp, spot_regi, pmax, pout)
+      gc(verbose = F)
+      
+    })
+    
+    rm(spots)
+    
+    cat("\nProcessed:", i, "|", nf, "\n")
+  })
   
-  spots <- fread(fin)
-  spots[, method := factor(method, levels = c("dbscan", "hclust"))]
-  
-  spots |> 
-    ggplot() + 
-    geom_histogram(
-      aes(x = dist, fill = method), alpha = 0.6, bins = 100, color = "gray33"
-    ) + 
-    labs(
-      title = sprintf(
-        "%s - distances within sleep clusters", gsub("_", " ", sp)),
-      x = "distance [m]"
-    ) +
-    theme_bw() +
-    theme(legend.position = "bottom")
-  
-  ggsave(filename = fout, width = 17, units = "cm")
-  
-  cat("\nProcessed:", i, "|", nf)
-})
+}
 
 rm(files, nf)
 
 
-# Spatial plots of large clusters -----------------------------------------
+# PLOT 2: Spatial plots of large clusters --------------------------------------
 
 files <- list.files(sleep_dirs,
    pattern = "2_distances_between_sleep_spots.*_continent.rds", full.names = T)
 nf <- length(files)
 
-lapply(seq_along(files), function(i){
+out_plots <- unlist(lapply(files, function(fin){
+
+  sp <- unique(gsub(".*/Studies/(.*?)/7_sleep_clusters/.*", "\\1", fin))
+  dl <- gsub(
+    ".*/2_distances_between_sleep_spots_(.*?)_continent.rds", "\\1", fin)
+  pname <- sprintf("1_%s_distances_within_clusters.png", sp)
+  regi <- "World"
+  fout <- file.path(graphs_dir, "7_sleep_clusters", regi, dl, pname)
+
+  return(fout)
+
+}))
+
+files <- files[!file.exists(out_plots)]
+nf <- length(files)
+rm(out_plots)
+
+if(nf > 0){
   
-  fin <- files[i]
-  sp <- gsub(".*/Studies/(.*?)_(.*?)/7_sleep_spots/.*", "\\1 \\2", fin)
-  dist_spots <- fread(fin)[method == "dbscan"]
-  
-  # Calculate max distance per cluster in each file
-  max_dist <- dist_spots[
-    , .(max_distance = max(dist)), by = .(file, sleep_cluster)]
-  max_dist <- max_dist[which.max(max_distance)]
-  rm(dist_spots)
-  
-  fout <- file.path(
-    plots_dir, sprintf("%s_cluster_with_highest_distance.png", gsub(" ", "_", sp)))
-  
-  org_fin <- gsub(
-    "2_distances_between_sleep_spots", "1_all_tracks_dcp_sleep_spots", fin)
-  
-  spots <- fread(org_fin)
-  db_cluster <- spots[method == "dbscan" & 
-      file == max_dist$file & sleep_cluster == max_dist$sleep_cluster]
-  h_cluster <- spots[method == "hclust" & 
-      file == max_dist$file & day_cycle %in% db_cluster$day_cycle][
+  lapply(seq_along(files), function(i){
+    
+    fin <- files[i]
+    sp <- gsub(".*/Studies/(.*?)/7_sleep_clusters/.*", "\\1", fin)
+    dl <- gsub(
+      ".*2_distances_between_sleep_spots_(.*?)_continent.rds", "\\1", fin)
+    
+    dbclust_dist <- fread(fin)[method == "dbscan"]
+    
+    lapply(regions, function(regi){
+      
+      pname <- sprintf("2_%s_cluster_with_highest_distance.png", sp)
+      dbdist_regi <- dbclust_dist
+      
+      fout <- file.path(graphs_dir, "7_sleep_clusters", regi, dl, pname)
+      
+      if(regi == "Europe"){ 
+        dbdist_regi <- dbdist_regi[continent == "Europe"] }
+      
+      if(nrow(dbdist_regi) == 0){ return(NULL) }
+      
+      # Calculate max distance per cluster in each file
+      max_dist <- dbdist_regi[
+        , .(max_distance = max(dist)), by = .(file, sleep_cluster)]
+      max_dist <- max_dist[which.max(max_distance)]
+      # get all distances
+      max_dist_dt <- dbdist_regi[
+        sleep_cluster == max_dist$sleep_cluster & file == max_dist$file]
+      
+      rm(dbdist_regi)
+      
+      fin <- gsub(
+        "2_distances_between_sleep_spots", "1_all_tracks_dcp_sleep_spots", fin)
+      
+      spots <- fread(fin)[file == max_dist$file]
+      
+      db_track <- spots[method == "dbscan"]
+      
+      if(regi == "Europe"){ db_track <- db_track[continent == "Europe"] }
+      
+      pmap <- plot_on_world_map(
+        db_track, 
+        as_steps = F, 
+        coord_cols = c("x_median", "y_median"), 
+        exp_deg = 0.01, 
+        color = "sleep_cluster", 
+        title = sprintf("%s - dbscan sleep clusters", gsub("_", " ", sp))) +
+        geom_text(
+          data = db_track[sleep_cluster == max_dist$sleep_cluster][1,],
+          aes(x = x_median, y = y_median, label = sleep_cluster)
+        ) +
+        labs(caption = paste("file:", basename(max_dist$file)))
+      
+      db_cluster <- db_track[sleep_cluster == max_dist$sleep_cluster]
+      h_cluster <- spots[method == "hclust" & day_cycle %in% db_cluster$day_cycle][
         , .(day_cycle, hclust_sleep_cluster = sleep_cluster)]
+      
+      db_cluster <- merge(db_cluster, h_cluster, by = "day_cycle", all.x = TRUE)
+      
+      db_cluster <- sf::st_as_sf(
+        db_cluster, coords = c("x_median", "y_median"), crs = 4326)
+      
+      clp <- db_cluster |> 
+        ggplot() + 
+        geom_sf(aes(color = factor(hclust_sleep_cluster)), size = 2) +
+        theme_bw() +
+        scale_x_continuous(guide = guide_axis(check.overlap = TRUE)) +
+        labs(
+          title = sprintf("Cluster %d - sleep locations and distances", max_dist$sleep_cluster),
+          caption = "colored by hclust classification"
+        ) +
+        theme(legend.position = "none")
+      
+      
+      cdist <- max_dist_dt |> 
+        ggplot() + 
+        geom_histogram(
+          aes(x = dist), color = "gray33", fill = "gray90", bins = 100
+        ) + 
+        theme_bw() +
+        labs(x = "distance [m]") 
+      
+      pout <- pmap / (clp + cdist) +
+        plot_layout(heights = c(2, 1))
+      
+      rm(pmap, clp, cdist, max_dist_dt, db_cluster, h_cluster, db_track, spots, 
+         dbdist_regi, max_dist)
+      
+      ggsave(fout, plot = pout, width = 18, height = 17, units = "cm")
+      
+      
+    })
+    
+    cat("\nProcessed:", i, "|", nf, "\n")
+    
+  })
   
-  db_track <- spots[method == "dbscan" & file == max_dist$file]
+}
   
-  db_cluster <- merge(db_cluster, h_cluster, by = "day_cycle", all.x = TRUE)
-  
-  source("6_distance_PLOT_FUNCTIONS.R")
-  
-  max_clust <- plot_on_world_map(
-    db_cluster, 
-    as_steps = F, 
-    coord_cols = c("x_median", "y_median"), 
-    exp_deg = 0.0001, 
-    color = "hclust_sleep_cluster", 
-    title = sprintf("Max dist - dbscan sleep cluster %d", max_dist$sleep_cluster)) +
-    guides(color = guide_legend(nrow = 2, title = "hclust")) +
-    plot_layout(guides = "collect") &
-    theme(legend.position = "bottom")
-  
-  all_clust <- plot_on_world_map(
-    db_track, 
-    as_steps = F, 
-    coord_cols = c("x_median", "y_median"), 
-    exp_deg = 0.0001, 
-    title = sprintf("%s - dbscan  all sleep clusters", sp), 
-    color_by = "sleep_cluster") +    
-    guides(color = guide_legend(nrow = 2, title = "dbscan")) +
-    plot_layout(guides = "collect") &
-    theme(legend.position = "bottom")
-  
-  all_clust / max_clust
-  
-  ggsave(filename = fout, width = 18, height = 18, units = "cm")
-  
-  cat("\nProcessed:", i, "|", nf)
-})
+ 
+# PLOT 3: Revisit time vs. tracking gap----------------------------------------
 
+files <- list.files(
+  sleep_dirs, full.names = T,
+  pattern = "1_all_tracks_dcp_sleep_spots.*_continent.rds")
 
-# 3 - Plot revisit time vs. tracking gap----------------------------------------
-
-
-sleep_files <- grep(
-  "continent", list.files(sleep_dirs, full.names = T), value = T)
-nsf <- length(sleep_files)
-
-lapply(seq(nsf), function(i){
+lapply(seq_along(nf), function(i){
   
   
   fin <- sleep_files[i]
   spots <- fread(fin)
   
-  sp <- gsub("_", " ", gsub(".*/Studies/([^/]+)/7_sleep_spots/.*", "\\1", fin))
+  sp <- gsub("_", " ", gsub(".*/Studies/([^/]+)/7_sleep_clusters/.*", "\\1", fin))
   dl_folder <- sub(".*spots_(.*)_(.*)_continent.*", "\\1_\\2", fin)
   
   
@@ -493,7 +647,7 @@ lapply(unique(basename(sleep_files)), function(ftype){
     spots <- spots[
       , .(revisit_day_cycle, sleep_cluster, method, continent, file)]
     spots[, species :=  gsub(
-      "_", " ", gsub(".*/Studies/([^/]+)/7_sleep_spots/.*", "\\1", fin))]
+      "_", " ", gsub(".*/Studies/([^/]+)/7_sleep_clusters/.*", "\\1", fin))]
   }))
   
   lapply(regions, function(regi){
@@ -727,7 +881,7 @@ lapply(unique(basename(sleep_files)), function(ftype){
 #' 
 #' fin <- sleep_files[10]
 #' 
-#' sp <- gsub("_", " ", gsub(".*/Studies/([^/]+)/7_sleep_spots/.*", "\\1", fin))
+#' sp <- gsub("_", " ", gsub(".*/Studies/([^/]+)/7_sleep_clusters/.*", "\\1", fin))
 #' 
 #' slp <- fread(fin)[
 #'   , deploy_id := paste0("dpl_", .GRP), by = file][
