@@ -202,8 +202,9 @@ file_deploy_clean <- "2_deployments_cleaned.csv"
 deployments <- fread(file.path(data_dir, "1_deployments_to_download.csv"))
 deployments[
   , file_org := make_file_name(study_id, individual_id, deployment_id)]
-deployments <- deployments[, .(individual_id, individual_local_identifier, 
-                               tag_id, tag_local_identifier, file_org)]
+deployments <- deployments[, .(
+  individual_id, individual_local_identifier, tag_id, tag_local_identifier, 
+  file_org, study_id, deployment_id)]
 
 # load the list of cleaned tracks
 cleaned_tracks <- fread(file.path(data_dir, file_track_problem))
@@ -271,3 +272,4 @@ cleaned_tracks <- cleaned_tracks[
   , excluded := dup_ind_to_exclude | dup_tag_to_exclude]
 
 fwrite(cleaned_tracks, file.path(data_dir, file_deploy_clean))
+

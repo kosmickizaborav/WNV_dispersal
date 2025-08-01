@@ -1,62 +1,30 @@
 library(data.table)
 source("0_helper_functions.R")
 
+data_dir <- here::here("Data")
+study_dir <- file.path(data_dir, "Studies")
 
 min_steps <- 20
 regions <- c("World", "Europe")
 
 # DIRECTORIES
 data_dir <- here::here("Data")
-graph_dir <- file.path(data_dir, "Graphs", "8_active_steps")
+graph_dir <- file.path(data_dir, "Graphs", "8_day_migration")
 
-dist_dirs <- grep(
-  "5_distances$", list.dirs(file.path(data_dir, "Studies")), value = T)
+dist_dirs <- file.path(
+  list.dirs(file.path(study_dir, full.path = T), "6_distances"))
 
-active_files <- list.files(
-  dist_dirs, pattern = "4_all_tracks_max_active_steps_.*continent\\.rds$",
+files <- list.files(
+  dist_dirs, pattern = "4_all_tracks_max_active_steps_.*continent.rds",
   full.names = TRUE)
-
-target_sp <- unique(gsub(
-  "_", " ", gsub(".*/Studies/([^/]+)/5_distances/.*", "\\1", active_files)))
-nsp <- length(target_sp)
-
-#' #' AVONET:
-#' #' - migration:
-#' #'   1 = Sedentary.
-#' #'   2 = Partially migratory - minority of population migrates long distances,
-#' #'   or most of population undergoes short-distance migration,
-#' #'   nomadic movements, distinct altitudinal migration, etc.
-#' #'   3 = Migratory - majority of population undertakes long-distance migration
-avonet <- setDT(readxl::read_xlsx(
-  file.path(here::here("Published_data", "AVONET1_Birdlife.xlsx")), sheet = 2))[
-    Species1 %in% target_sp][
-  , .(species = Species1, migration = Migration)]
-
-# ELTON
-elton <- fread(here::here("Published_data", "BirdFuncDat.txt"))[
-  Scientific %in% target_sp][
-  , .(species = Scientific, nocturnal = Nocturnal)][
-  , nocturnal := fifelse(species == "Nycticorax nycticorax", 1, nocturnal)]
-
-traits <- merge(avonet, elton, by = "species", all = TRUE)
-
-dist_files <- unlist(lapply(target_sp, function(sp){
-  
-  dn <- ifelse(
-    traits[species == sp, nocturnal] == 1, "day_to_night", "night_to_day") 
-  
-  grep(dn, grep(gsub(" ", "_", sp), active_files, value = T), value = T)
- 
-}))
-
-rm(active_files, elton, avonet)
-
 
 
 # Europe check ------------------------------------------------------------
 
 
-
+files <- list.files(
+  dist_dirs, pattern = "4_all_tracks_max_active_steps_.*continent.rds",
+  full.names = TRUE)
 
 
 # X - Median active step per month ----------------------------------------

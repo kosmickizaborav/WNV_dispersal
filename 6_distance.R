@@ -53,6 +53,7 @@ library(patchwork)
 #load the functions for distance calculations
 source("6_distance_FUNCTIONS.R")
 source("6_distance_PLOT_FUNCTIONS.R")
+source("0_helper_functions.R")
 
 # ALL OUTPUT DIRECTORIES
 data_dir <- here::here("Data")
@@ -96,8 +97,6 @@ nocturnal_dt <- fread(here::here("Published_data", "00_bird_traits.csv"))[
   birdlife_name %in% target_sp]
 # there were duplicates because of some synonyms
 nocturnal_dt <- unique(nocturnal_dt[, .(birdlife_name, nocturnal)])
-# missing information for this species
-nocturnal_dt[birdlife_name == "Larus smithsonianus", nocturnal := 0]
 
 
 # 1 - DCP distances -------------------------------------------------------
@@ -421,64 +420,74 @@ if(!file.exists(file.path(data_dir, regi_file))){
   
   files <- list.files(
     dist_dirs, pattern = ".*_continent.rds", full.names = T)
-  nf <- length(cont_files)
+  nf <- length(files)
   
   regi_dt <- rbindlist(lapply(seq_along(files), function(i){
     
-    fin <- cont_files[i]
+    fin <- files[i]
     
-    cat(paste("\n", i, "|", ncf, "DONE!"))
+    cat("\n", i, "|", nf, "DONE!")
     
     dt <- fread(fin)
-    n_total <- nrow(dt)
-    n_europe <- sum(dt$continent == "Europe", na.rm = TRUE)
-    conts <- unique(dt$continent)
+    dt_cols <- colnames(dt)
+    
+    dc_col <- ifelse("day_cycle" %in% dt_cols, "day_cycle", "day_cycle_1")
+    y_col <- ifelse("y_median" %in% dt_cols, "y_median", "y1_")
+    
+    # get day bursts
+    dt[, ":=" (
+      dcp_burst = cumsum(c(1, diff(as.numeric(get(dc_col))) > 1)),
+      yd = day_cycle_to_yd(get(dc_col))
+      ), by = file]
+    
+    # check how long is the continuous track
+    burst_dt <- dt[, .N, by = c("file", "dcp_burst")]
+    burst_stat <- burst_dt[, .(
+      burst_max = max(N),
+      burst_median = median(N), 
+      burst_mean = mean(N)
+    ), by = file]
     
     by_track <- dt[, .(
       n_locs = .N, 
-      in_eu = sum(continent == "Europe")), 
-      by = file]
-    by_track <- by_track[, .(
-      tracks_in_europe_only = sum(in_eu == n_locs),
-      tracks_in_world = .N, 
-      median_locs_per_track = median(n_locs))]
+      n_locs_eu = sum(continent == "Europe"), 
+      n_locs_noneu = sum(continent != "Europe"), 
+      n_locs_north = sum(get(y_col) > 0), 
+      n_locs_south = sum(get(y_col) < 0),
+      n_days = uniqueN(get(dc_col)),
+      dc_start = min(get(dc_col)),
+      dc_end = max(get(dc_col)),
+      period_days = diff(range(get(dc_col))),
+      year_days = uniqueN(yd),
+      continents = paste(sort(unique(continent)), collapse = ", ")
+      ), by = file]
     
-    cbind(
-      data.table(
-        n_europe = n_europe,
-        n_world = n_total,
-        continents = paste(conts, collapse = "_"),
-        step_type = unique(dt$step_type), 
-        file = fin
-      ), 
-      by_track)
+    by_track <- merge(by_track, burst_stat, by = "file", all.x = T)
+    
+    rm(dt, burst_stat)
+    
+    by_track[, file := basename(file)]
+    setnames(by_track, old = "file", new = "track")
+    
+    by_track[, file := fin]
     
   }), fill = T)
   
-  regi_dt[, ':=' (
-    species = gsub(
-      "_", " ", gsub(".*/Studies/([^/]+)/6_distances/.*", "\\1", file)),
-    day_limits = sub(".*[distances|steps]_(.*)_(.*)_continent.*", "\\1-\\2", file), 
-    file = basename(file))]
+  regi_dt <- regi_dt[, ':=' (
+    species = gsub(".*/Studies/(.*)_(.*)/6_distances/.*", "\\1 \\2", file),
+    day_limits = sub(
+      ".*[distances|steps]_(.*)_(.*)_continent.*", "\\1-\\2", file), 
+    file = basename(file), 
+    sensor = gsub(".*dep_(.*)_sen.rds", "\\1", track))]
   
+  regi_dt[, n_tracks := uniqueN(track), by = species]
   
-  desired_order <- c(
-    "species",
-    "n_europe",
-    "n_world",
-    "tracks_in_europe_only",
-    "tracks_in_world",
-    "median_locs_per_track",
-    "day_limits",
-    "step_type",
-    "continents",
-    "file"
-  )
+  traits <- unique(fread(here::here("Published_data", "00_bird_traits.csv"))[
+    , .(species = birdlife_name, family, order, migration_txt, nocturnal)])
   
-  
-  regi_dt <- regi_dt[, ..desired_order]
-  
-  setorder(regi_dt, day_limits, file, species)
+  regi_dt <- merge(regi_dt, traits, by = "species", all.x = T)
+  setorder(regi_dt, 
+    day_limits, file, order, n_locs_eu, period_days, burst_median, n_tracks)
   
   fwrite(regi_dt, file.path(data_dir, regi_file))
   
@@ -732,120 +741,3 @@ invisible(lapply(seq_along(files), function(i){
 
 
 
-
-# check_dt <- rbindlist(lapply(seq_along(dcp_files), function(i){
-#   
-#   dcp_track <- fread(dcp_files[i])
-#   sp <- gsub(
-#     "_", " ", sub(".*/Studies/([^/]+)/6_distances/.*", "\\1", dcp_files[i]))
-#   
-#   data.table(
-#     dcp_file = dcp_files[i], 
-#     species = sp, 
-#     org_tracks = unique(dcp_track$file)
-#   )
-#   
-# }))
-
-
-
-
-# Correct dcp problem -----------------------------------------------------
-
-# In the original dcp function there was an error with output 
-# when there is no data it was returning availability T which makes problems
-# later
-# if(is.null(track)){ return(data.table(day_period_distance_available = F)) }
-# in order to avoid reruning the whole code cause it takes too long, 
-# I corrected them manually after, as if the function was right using the 
-# following code
-
-# checking problems
-# lapply(seq_along(target_sp), function(n){
-#   
-#   cat("\n", n, "of", nsp)
-#   
-#   sp <- target_sp[n]
-#   # output directory
-#   out_dir <- grep(gsub(" ", "_", sp), dist_dirs, value = T)
-#   
-#   # get available tracks for the species
-#   sp_files <- list.files(
-#     gsub("6_distances", "5_flag_static", out_dir), full.names = T)
-#   
-#   if(length(sp_files) == 0){ return(NULL) }
-#   
-#   dcp_check <- rbindlist(lapply(day_limits, function(dl){
-#     
-#     # OUTPUT file with day-cycle-period (DCP) distances
-#     fout <- paste0(
-#       "1_all_tracks_dcp_distances_", dl[1], "_", dl[2], ".rds")
-#     
-#     dcp_files <- rbindlist(lapply(seq_along(sp_files), function(i){
-#   
-#       # load the track
-#       fin <- sp_files[i]
-#       track <- fread(fin)
-#       
-#       # calculate DCP distances and median DCP positions
-#       day_times <- add_day_cycle(track, day_limits = dl)
-#       
-#       out_dir <- data.table(
-#         file = fin, 
-#         day_limits = paste(dl, collapse = "_"), 
-#         species = sp, 
-#         fout = fout)
-#       
-#       if(is.null(day_times)){
-#         return(out_dir[, data := "none"])
-#       } else {return(out_dir[, data := "oki"])}
-# 
-#     }), fill = T)
-#     
-#     return(dcp_files)
-#     
-#   }), fill = T)
-#   
-#   fwrite(
-#     dcp_check, file.path(out_dir, paste(gsub(" ", "_", sp), "_dcp_check.rds")))
-#   
-# })
-# 
-# 
-# # correcting
-# check <- lapply(seq_along(target_sp), function(n){
-#   
-#   cat("\n", n, "of", nsp)
-#   
-#   sp <- target_sp[n]
-#   # output directory
-#   out_dir <- grep(gsub(" ", "_", sp), dist_dirs, value = T)
-#   
-#   dcp_check <- fread(
-#     file.path(out_dir, paste(gsub(" ", "_", sp), "_dcp_check.rds")))
-#   
-#   fouts <- unique(dcp_check$fout)
-#   
-#   lapply(fouts, function(f){
-#     
-#     dcp_dist <- fread(file.path(out_dir, f))
-#     
-#     ndt <- dcp_check[fout == f, .(file, post_dcp_check = data)]
-#     
-#     dcp_dist <- merge(dcp_dist, ndt, by = "file", all.x = T)
-#     
-#     dcp_dist[, day_period_distance_available := fifelse(
-#       post_dcp_check == "none", F, day_period_distance_available)]
-#     
-#     fwrite(dcp_dist, file.path(out_dir, f))
-#     
-#   })
-#     
-#   if(sum(dcp_check$data == "none") > 0) return(sp) else return(NULL)
-#   
-# })
-
-# dcp_check_files <- list.files(
-#   dist_dirs, "dcp_check", full.names = T, recursive = T)
-# 
-# file.remove(dcp_check_files)

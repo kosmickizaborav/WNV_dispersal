@@ -242,6 +242,34 @@ day_cycle_to_yd <- function(day_cycle){
   
 }
 
+
+# FUNCTION: add_season ----------------------------------------------------
+
+add_season <- function(dt, t_col = NULL, y_col = NULL) {
+  
+  dt[, mon :=  month(get(t_col))]
+  
+  # Extract the month from the day_cycle column
+  dt[, season := fcase(
+      mon %in% c(12, 1, 2) & get(y_col) >= 0, "winter",
+      mon %in% c(12, 1, 2) & get(y_col) < 0, "summer",
+      mon %in% c(3, 4, 5) & get(y_col) >= 0, "spring",
+      mon %in% c(3, 4, 5) & get(y_col) < 0, "autumn",
+      mon %in% c(6, 7, 8) & get(y_col) >= 0, "summer",
+      mon %in% c(6, 7, 8) & get(y_col) < 0, "winter",
+      mon %in% c(9, 10, 11) & get(y_col) >= 0, "autumn",
+      mon %in% c(9, 10, 11) & get(y_col) < 0, "spring"
+    )]
+  
+  
+  dt[, season := factor(
+    season, levels = c("winter", "spring", "summer", "autumn"))]
+  
+  return(dt)
+}
+
+
+
 # rename_to_birdlife <- function(df, species_name, add_phylo = F) {
 #   library(tidyverse)
 #   

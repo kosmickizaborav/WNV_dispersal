@@ -376,7 +376,7 @@ setnames(bspeed, old = "birdlife_name", new = "scientific_name")
 fwrite(bspeed, file.path(pub_dir, "00_bird_wing_data_speed_mean.csv"))
 
 
-# Traits ------------------------------------------------------------------
+# 7 - Traits Databases----------------------------------------------------------
 
 #' #' AVONET:
 #' #' - migration:
@@ -405,12 +405,24 @@ elton <- elton[!is.na(birdlife_name)][
 # combine
 traits <- merge(avonet, elton, by = "birdlife_name", all = T)
 
+# MISSING INFORMATION
+# missing info for the species
+# Grus vipio and Cuculus optatus
+# assumed migratory because other Grus ssp. and Cuculus ar migratory 
+# also confirmed based on the https://datazone.birdlife.org/: Full Migrant
+traits[
+  birdlife_name %in% c("Cuculus optatus", "Grus vipio"), migration := 3]
+# Larus ssp. is daily species
+traits[birdlife_name == "Larus smithsonianus", nocturnal := 0]
+
 traits[, migration_txt := fcase(
   migration == 1, "sedentary", 
   migration == 2, "partially migratory", 
   migration == 3, "migratory", 
   default = NA_character_
 )]
+
+traits <- add_birdlife_phylogeny(traits, species_name = "birdlife_name")
 
 fwrite(traits, file.path(pub_dir, "00_bird_traits.csv"))
 

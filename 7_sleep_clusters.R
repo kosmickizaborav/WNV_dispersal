@@ -54,15 +54,139 @@ invisible(lapply(all_plots_dirs, dir.create, showWarnings = F, recursive = T))
 target_sp <- gsub("_", " ", list.files(study_dir))
 nsp <- length(target_sp)
 
-nocturnal_dt <- fread(here::here("Published_data", "00_bird_traits.csv"))[
+trait_dt <- fread(here::here("Published_data", "00_bird_traits.csv"))[
   birdlife_name %in% target_sp]
 # there were duplicates because of some synonyms
-nocturnal_dt <- unique(nocturnal_dt[, .(birdlife_name, nocturnal)])
-# missing information for this species
-nocturnal_dt[birdlife_name == "Larus smithsonianus", nocturnal := 0]
+trait_dt <- unique(nocturnal_dt[, .(birdlife_name, nocturnal, migration_txt)])
+
 
 # coordinate system to use when calculating distances
 crs <- st_crs(4326)
+
+
+
+# 0 - Distances between nights --------------------------------------------
+
+
+files <- list.files(
+  dist_dirs, 
+  pattern = "1_all_tracks_dcp_distances.*continent.rds", full.names = T)
+
+plots_dir <- file.path(graphs_dir, "7_sleep_clusters", "0_dplots")
+# dir.create(plots_dir)
+
+# spots_files <- gsub(
+#   "6_distances", "7_sleep_clusters", 
+#   gsub("dcp_distances", "dcp_sleep_spots", files))
+# 
+# files <- files[!(file.exists(spots_files) | 
+#                    file.exists(gsub(".rds", "_nodata.rds", spots_files)))]
+nf <- length(files)
+#rm(spots_files)
+
+if(nf > 0){
+  
+  # only columns of interest
+  cols_of_interest <- c(
+    "x_median", "y_median", "t_median", "file", "day_period")
+  
+  lapply(seq_along(files), function(n){
+    
+    fin <- files[n]
+    
+    fout <- gsub(
+      "6_distances", "7_sleep_clusters", 
+      gsub("1_all_tracks_dcp_distances", "0_dist_dcp", fin))
+    
+    sp <- gsub(".*/Studies/(.*)_(.*)/6_distances/.*", "\\1 \\2", fin)
+    
+    sleep_time <- ifelse(
+      nocturnal_dt[birdlife_name == sp, nocturnal] == 1, "day", "night")
+    
+    # load the data
+    dcp_locs <- fread(fin)
+    
+    dcp_locs <- dcp_locs[, ..cols_of_interest]
+    
+    dcp_locs[, nlocsfile := .N, by = file]
+    
+    if(!any(dcp_locs$day_period == sleep_time) | !any(dcp_locs$nlocsfile > 1)){
+      
+      fout <- gsub(".rds", "_nodata.rds", fout)
+      
+      fwrite(dcp_locs, fout)
+      
+      return(NULL)
+      
+    }
+    
+    # subsetting dcp just for the sleeping points
+    dcp_locs <- dcp_locs[day_period == sleep_time & nlocsfile > 1]
+    nlocs <- nrow(dcp_locs)
+    ntracks <- uniqueN(dcp_locs$file)
+    
+    
+    # group by deployment and day_period
+    dist_sleep <- dcp_locs[, {
+      # copy .SD to avoid modifying by reference
+      p_locs <- .SD
+      # order by timestamp
+      setorder(p_locs, t_median)
+      
+      # convert to sf object and calculate distances
+      p_sf <- st_as_sf(
+        p_locs, coords = c("x_median", "y_median"), crs = crs, remove = FALSE)
+      distm <- st_distance(p_sf)
+      
+      # get lower triangle indices (unique pairs)
+      inds <- which(lower.tri(distm), arr.ind = TRUE)
+      
+      data.table(
+        file = p_locs$file[1],
+        dist = as.numeric(distm[inds]), # convert units to numeric
+        nlocs = nrow(p_locs)
+      )
+        
+    }, by = file]
+    
+    
+    fwrite(dist_sleep, fout)
+    
+    cat("\nProcessed:", n, "|", nf)
+    
+    p <- dist_sleep |> 
+      ggplot() + 
+      geom_histogram(
+        aes(x = dist, y = after_stat(density)), 
+        bins = 100, fill = "gray90", color = "gray33", alpha = 0.6) +
+      scale_x_log10() + 
+      theme_bw() +
+      labs(
+        x = "distance[m]", 
+        title = sprintf(
+          "%s - %s - distances between sleep spots", sp, sleep_time),
+        subtitle = sprintf("n locations: %d, n tracks: %d", nlocs, ntracks)
+      )
+
+    pout <- file.path(
+      plots_dir, 
+      gsub("0", gsub(" ", " ", sp), gsub(".rds", ".png", basename(fout))))
+    
+    ggsave(filename = pout, plot = p, width = 17, height = 12, units = "cm")
+          
+    rm(dist_sleep, p, pout, dcp_locs, nlocs, ntracks)
+    gc(verbose = F)
+    
+  })
+  
+  
+}
+
+rm(files, nf)
+
+
+
+
 
 # 1 - Classify sleep spots -------------------------------------------------------
 
