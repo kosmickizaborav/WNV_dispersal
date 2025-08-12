@@ -14,7 +14,7 @@ library(ggplot2)
 library(patchwork)
 #source("6_distance_FUNCTIONS.R")
 source("6_distance_PLOT_FUNCTIONS.R")
-# source("0_helper_functions.R")
+source("0_helper_functions.R")
 
 # OUTPUT directories -------------------------------------------------------
 
@@ -47,19 +47,18 @@ dir.create(plots_dir, showWarnings = F)
 
 # GET WHETHER THE ANIMAL IS NOCTURNAL OR DIURNAL FOR THE SLEEP SPOTS
 target_sp <- gsub("_", " ", list.files(study_dir))
-nsp <- length(target_sp)
 
 traits_dt <- fread(here::here("Published_data", "00_bird_traits.csv"))[
   birdlife_name %in% target_sp]
 # there were duplicates because of some synonyms
 traits_dt <- unique(traits_dt[, .(birdlife_name, nocturnal, migration_txt)])
-
+rm(target_sp)
 
 # coordinate system to use when calculating distances
 crs <- st_crs(4326)
 
 
-# 1 - Explore parameter influence -----------------------------------------
+# 1 - Distances between sleep spots -----------------------------------------
 
 fin_dcp <- "1_all_tracks_dcp_distances_nauticalDawn_nauticalDusk_continent.rds"
 
@@ -170,6 +169,11 @@ if(nf > 0){
   
 }
 
+rm(dist_dirs, files, nf, fin_dcp)
+
+
+# 2 - Dbscan | Explore parameter influence --------------------------------
+
 
 # EXPLORE DIFFERENT PARAMETERS
 par_dt <- CJ(
@@ -255,250 +259,441 @@ if(ndirs > 0){
 
 }
 
-rm(par_dt)
+rm(par_dt, ndirs)
 
 
 
 # PLOT: parameter influence -----------------------------------------------
-# 
-# clust_dirs <- list.files(
-#   sleep_dirs, pattern = "2_dbscan_clusters", full.names = T)
-# 
-# dir.create(file.path(plots_dir, "1_paremeters"), showWarnings = F)
-# 
-# files_out <- file.path(
-#   plots_dir, "1_paremeters", sprintf("1_%s_dbscan_clusters_sum.png", 
-#   gsub(".*/Studies/(.*?)/7_sleep_clusters/.*", "\\1", clust_dirs)))
-# 
-# clust_dirs <- clust_dirs[!file.exists(files_out)]
-# rm(files_out)
-# 
-# ndirs <- length(clust_dirs)
-# 
-# 
-# col <- paletteer_d("tvthemes::bigHero6")[1:7]
-# names(col) <- factor(1:7)
-# 
-# 
-# 
-# lapply(seq_along(clust_dirs), function(i){
-#   
-#   clsdir <- clust_dirs[i]
-#   sp <- gsub(".*/Studies/(.*?)/7_sleep_clusters/.*", "\\1", clsdir)
-#   
-#   files <- list.files(clsdir, full.names = T)
-#   
-#   dt <- rbindlist(
-#     lapply(files, function(fin){
-#       fread(fin)[, clust_file := basename(fin)]})
-#     )
-#   
-#   dt[, n_per_file := .N, by = .(file, clust_file)]
-#   
-#   dt <- dt[n_per_file >= 10]
-#   
-#   if(nrow(dt) == 0){ return(NULL) }
-#   
-#   nf <- uniqueN(dt$file)
-#   
-#   dt[, npts := as.numeric(gsub(".*npts_(\\d+)_distthr_.*", "\\1", clust_file))]
-#   dt[, dist_thr := as.numeric(gsub(".*distthr_(\\d+).rds", "\\1", clust_file))]
-#   
-#   dt <- dt[npts > 1]
-# 
-#   
-#   dt_summary <- dt[, .(
-#     n_total = .N,
-#     n_clusters = uniqueN(cluster[cluster != 0]), 
-#     n_unassigned = sum(cluster == 0)
-#     ), by = .(file, npts, dist_thr)]
-#   
-#   dt_summary[, npts := factor(npts)]
-#   
-#   dt_sum <- dt_summary[
-#     , .(
-#       n_total = sum(n_total), 
-#       n_clusters = sum(n_clusters),
-#       n_unassigned = sum(n_unassigned),
-#       perc_unassigned = sum(n_unassigned)/sum(n_total) * 100
-#     ), by = .(npts, dist_thr)]
-#   
-#   nt <- unique(dt_sum$n_total)
-#   
-#   pc <- dt_sum |> 
-#     ggplot() +
-#     geom_line(
-#       aes(x = dist_thr, y = n_clusters, color = npts),
-#       alpha = 0.5, linewidth = 2
-#     ) +
-#     theme_bw() +
-#     scale_color_manual(values = col) +
-#     guides(color = guide_legend(nrow = 1)) +
-#     labs(
-#       x = "distance threshold [m]",
-#       y = "number of clusters", 
-#       color = "min points in a cluster", 
-#       title = sprintf("Total number of clusters across tracks [N = %d]", nf)
-#     ) + 
-#     theme(
-#       legend.position = "none", 
-#       plot.title = element_text(hjust = 0.5)
-#       #axis.title.x = element_blank(), 
-#       #axis.text.x = element_blank()
-#     )
-#   
-#   pp <- dt_sum |> 
-#     ggplot() +
-#     geom_line(
-#       aes(x = dist_thr, y = perc_unassigned, color = npts), 
-#       alpha = 0.5, linewidth = 2) +
-#     theme_bw() +
-#     scale_color_manual(values = col) +
-#     guides(color = guide_legend(nrow = 1)) +
-#     labs(
-#       x = "distance threshold [m]",
-#       y = "unassigned locations [%]", 
-#       color = "min points in a cluster", 
-#       title = sprintf("Percentage of unassigned locations [N = %d]", nt),
-#     ) + 
-#     theme(
-#       legend.position = "bottom", 
-#       plot.title = element_text(hjust = 0.5))
-#   
-#   pc + pp +
-#     plot_annotation(
-#       title = sprintf("%s - sleep clusters", gsub("_", " ", sp))
-#     ) +
-#     plot_layout(guides = "collect") & 
-#     theme(
-#       plot.title = element_text(hjust = 0.5, face = "bold"), 
-#       legend.position = "bottom"
-#   )
-#   
-#   ggsave(
-#     filename = file.path(
-#       plots_dir, "1_paremeters", sprintf("1_%s_dbscan_clusters_sum.png", sp)),
-#     height = 10, width = 20)
-# 
-#   rm(pc, pp, dt_sum, dt_summary)
-#   
-#   cat("\nProcessed:", i, "|", ndirs, "\n")
-#   
-# })
-
-
-
-
-
-# Revisits ----------------------------------------------------------------
-
-file_dcp <- "1_all_tracks_dcp_distances_nauticalDawn_nauticalDusk_continent.rds"
-
-# only columns of interest
-cols_of_interest <- c(
-  "day_cycle", "day_period", "x_median", "y_median", "t_median",
-  "file", "continent", "subregion")
 
 clust_dirs <- list.files(
   sleep_dirs, pattern = "2_dbscan_clusters", full.names = T)
 
-return_dirs <- gsub("2_dbscan_clusters", "3_return_times", clust_dirs)
-invisible(lapply(return_dirs, dir.create, showWarnings = F))
+dir.create(file.path(plots_dir, "1_paremeters"), showWarnings = F)
 
-files <- list.files(clust_dirs, full.names = T)
-files <- files[!file.exists(gsub("2_dbscan_clusters", "3_return_times", files))]
+files_out <- file.path(
+  plots_dir, "1_paremeters", sprintf("1_%s_dbscan_clusters_sum.png",
+  gsub(".*/Studies/(.*?)/7_sleep_clusters/.*", "\\1", clust_dirs)))
+
+clust_dirs <- clust_dirs[!file.exists(files_out)]
+rm(files_out)
+
+ndirs <- length(clust_dirs)
 
 
-clust_dirs <- unique(dirname(files))
-ncls <- length(clust_dirs)
+if(ndirs > 0){
+  
+  col <- paletteer_d("tvthemes::bigHero6")[1:7]
+  names(col) <- factor(1:7)
+  
+  lapply(seq_along(clust_dirs), function(i){
+    
+    clsdir <- clust_dirs[i]
+    sp <- gsub(".*/Studies/(.*?)/7_sleep_clusters/.*", "\\1", clsdir)
+    
+    files <- list.files(clsdir, full.names = T)
+    
+    dt <- rbindlist(
+      lapply(files, function(fin){
+        fread(fin)[, clust_file := basename(fin)]})
+    )
+    
+    dt[, n_per_file := .N, by = .(file, clust_file)]
+    
+    dt <- dt[n_per_file >= 10]
+    
+    if(nrow(dt) == 0){ return(NULL) }
+    
+    nf <- uniqueN(dt$file)
+    
+    dt[, npts := as.numeric(gsub(".*npts_(\\d+)_distthr_.*", "\\1", clust_file))]
+    dt[, dist_thr := as.numeric(gsub(".*distthr_(\\d+).rds", "\\1", clust_file))]
+    
+    dt <- dt[npts > 1]
+    
+    
+    dt_summary <- dt[, .(
+      n_total = .N,
+      n_clusters = uniqueN(cluster[cluster != 0]),
+      n_unassigned = sum(cluster == 0)
+    ), by = .(file, npts, dist_thr)]
+    
+    dt_summary[, npts := factor(npts)]
+    
+    dt_sum <- dt_summary[
+      , .(
+        n_total = sum(n_total),
+        n_clusters = sum(n_clusters),
+        n_unassigned = sum(n_unassigned),
+        perc_unassigned = sum(n_unassigned)/sum(n_total) * 100
+      ), by = .(npts, dist_thr)]
+    
+    nt <- unique(dt_sum$n_total)
+    
+    pc <- dt_sum |>
+      ggplot() +
+      geom_line(
+        aes(x = dist_thr, y = n_clusters, color = npts),
+        alpha = 0.5, linewidth = 2
+      ) +
+      theme_bw() +
+      scale_color_manual(values = col) +
+      guides(color = guide_legend(nrow = 1)) +
+      labs(
+        x = "distance threshold [m]",
+        y = "number of clusters",
+        color = "min points in a cluster",
+        title = sprintf("Total number of clusters across tracks [N = %d]", nf)
+      ) +
+      theme(
+        legend.position = "none",
+        plot.title = element_text(hjust = 0.5)
+        #axis.title.x = element_blank(),
+        #axis.text.x = element_blank()
+      )
+    
+    pp <- dt_sum |>
+      ggplot() +
+      geom_line(
+        aes(x = dist_thr, y = perc_unassigned, color = npts),
+        alpha = 0.5, linewidth = 2) +
+      theme_bw() +
+      scale_color_manual(values = col) +
+      guides(color = guide_legend(nrow = 1)) +
+      labs(
+        x = "distance threshold [m]",
+        y = "unassigned locations [%]",
+        color = "min points in a cluster",
+        title = sprintf("Percentage of unassigned locations [N = %d]", nt),
+      ) +
+      theme(
+        legend.position = "bottom",
+        plot.title = element_text(hjust = 0.5))
+    
+    pc + pp +
+      plot_annotation(
+        title = sprintf("%s - sleep clusters", gsub("_", " ", sp))
+      ) +
+      plot_layout(guides = "collect") &
+      theme(
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        legend.position = "bottom"
+      )
+    
+    ggsave(
+      filename = file.path(
+        plots_dir, "1_paremeters", sprintf("1_%s_dbscan_clusters_sum.png", sp)),
+      height = 10, width = 20)
+    
+    rm(pc, pp, dt_sum, dt_summary)
+    
+    cat("\nProcessed:", i, "|", ndirs, "\n")
+    
+  })
+  
+  
+}
 
-rm(files, return_dirs)
 
-lapply(seq_along(clust_dirs), function(i){
+
+# 3 - Dbscan: 5pts, 350m ----------------------------------------------------
+
+fin_dcp <- "1_all_tracks_dcp_distances_nauticalDawn_nauticalDusk_continent.rds"
+file_out <- "3_dbscan_clusters_npts_5_distthr_350_nauticalDawn_nauticalDusk.rds"
+
+dist_dirs <- file.path(list.files(study_dir, full.names = T), "6_distances")
+
+# listing all dcp files
+files <- list.files(dist_dirs, fin_dcp, full.names = T)
+files_out <- file.path(
+  gsub("/6_distances", "/7_sleep_clusters", dirname(files)), file_out)
+
+files <- files[
+  !(file.exists(files_out) | 
+      file.exists(gsub(".rds", "_nodata.rds", files_out)))]
+rm(files_out)
+nf <- length(files)
+
+
+if(nf > 0){
   
-  clsdir <- clust_dirs[i]
-  
-  sp <- gsub(".*/Studies/(.*?)_(.*?)/7_sleep_clusters/.*", "\\1 \\2", clsdir)
-  sleep_time <- ifelse(
-    traits_dt[birdlife_name == sp, nocturnal] == 1, "day", "night")
-  
-  tracks <- list.files(
-    gsub("2_dbscan_clusters", "1_raw_distances", clsdir))
-  
-  dcp_stp <- fread(file.path(
-    gsub("7_sleep_clusters", "6_distances", dirname(clsdir)), fin_dcp))
-  dcp_stp <- dcp_stp[, ..cols_of_interest]
-  
-  dcp_stp[, bfile := basename(file)]
-  
-  dcp_stp <- dcp_stp[day_period == sleep_time & bfile %in% tracks]
-  setorder(dcp_stp, file, t_median)
-  
-  dcp_stp[, file := NULL]
-  
-  files <- list.files(clsdir, full.names = T)
-  files <- files[
-    !file.exists(gsub("2_dbscan_clusters", "3_return_times", files))]
-  nf <- length(files)
+  # only columns of interest
+  cols_of_interest <- c(
+    "day_cycle", "day_period", "x_median", "y_median", "t_median", 
+    "file", "continent", "subregion")
   
   lapply(seq_along(files), function(n){
     
     fin <- files[n]
     
-    dbsc <- fread(fin)
-    dbsc[, bfile := basename(file)]
+    fout <- file.path(
+      gsub("6_distances", "7_sleep_clusters", dirname(fin)), file_out)
+   
     
-    dbsc <- split(dbsc, by = "bfile")
+    sp <- gsub(".*/Studies/(.*)_(.*)/6_distances/.*", "\\1 \\2", fin)
     
-    dbsc <- rbindlist(lapply(dbsc, function(dt){
+    sleep_time <- ifelse(
+      traits_dt[birdlife_name == sp, nocturnal] == 1, "day", "night")
+    
+    # load the data
+    dcp_locs <- fread(fin)[ , ..cols_of_interest]
+    
+    dcp_locs[, n_sleep := sum(day_period == sleep_time), by = file]
+    
+    if(!any(dcp_locs$day_period == sleep_time) | all(dcp_locs$n_sleep <= 1)){
       
-      bfile_dt <- unique(dt$bfile)
+      fout <- gsub(".rds", "_nodata.rds", fout)
       
-      trk_data <- dcp_stp[bfile == bfile_dt][, bfile := NULL]
+      fwrite(unique(dcp_locs[, .(file, n_sleep)]), fout)
+      rm(dcp_locs)
       
-      cbind(trk_data, dt)[, bfile := NULL]
+      return(NULL)
       
-    }))
+    }
+    
+    # subsetting dcp just for the sleeping points
+    dcp_locs <- dcp_locs[day_period == sleep_time & n_sleep > 1]
+    
+    # group by deployment and day_period
+    sleeps <- dcp_locs[, {
+      
+      p_locs <- copy(.SD)
+      
+      setorder(p_locs, t_median)
+      
+      # convert to sf object and calculate distances
+      p_sf <- st_as_sf(
+        p_locs, coords = c("x_median", "y_median"), crs = crs)
+      
+      clust_dbs <- dbscan(as.dist(st_distance(p_sf)), eps = 350, minPts = 5)
+      p_locs$sleep_cluster <- as.integer(clust_dbs$cluster)
+      
+      # return datatable
+      as.data.table(p_locs)
+      
+    }, by = file]
     
     
-    dbsc[
+    sleeps[
       , `:=`(
         revisit_day_cycle = c(0, diff(day_cycle)),
         revisit_timelag = c(NA, diff(t_median, units = "days"))
-      ), by = .(file, cluster)]
+      ), by = .(file, sleep_cluster)]
     
-    dbsc[
+    sleeps[
       , tracking_gap := {
         if (revisit_day_cycle > 1) {
           gap_days <- (day_cycle - revisit_day_cycle + 1):(day_cycle - 1)
-          track_days <- dbsc[
+          track_days <- sleeps[
             file == .BY$file & day_cycle %in% gap_days, day_cycle]
           length(gap_days) - length(track_days)
         } else 0
       }, by = .(file, day_cycle)
     ]
     
+    fwrite(sleeps, fout)
     
-    fwrite(dbsc, gsub("2_dbscan_clusters", "3_return_times", fin))
+    rm(sleeps, dcp_locs)
     
-    cat("DONE:", n, "|", nf, "-", i, "|", ncls, "\n")
-    
-    rm(dbsc)
+    cat("\nProcessed:", n, "|", nf)
     
     return(invisible(NULL))
     
   })
   
-  rm(dcp_stp, files)
-  gc(verbose = F)
   
-  return(NULL)
+}
+
+rm(files, nf, file_out, fin_dcp)
+
+
+# 3 - Revisit - merge ----------------------------------------------------------
+
+# fin_dcp <- "1_all_tracks_dcp_distances_nauticalDawn_nauticalDusk_continent.rds"
+# file_out <- "3_dbscan_clusters_npts_5_distthr_350_nauticalDawn_nauticalDusk_merge.rds"
+# 
+# 
+# dist_dirs <- file.path(list.files(study_dir, full.names = T), "6_distances")
+# 
+# # listing all dcp files
+# files <- list.files(dist_dirs, fin_dcp, full.names = T)
+# files_out <- file.path(
+#   gsub("/6_distances", "/7_sleep_clusters", dirname(files)), file_out)
+# 
+# files <- files[
+#   !(file.exists(files_out) | 
+#       file.exists(gsub(".rds", "_nodata.rds", files_out)))]
+# rm(files_out)
+# nf <- length(files)
+# 
+# 
+# if(nf > 0){
+# 
+#   lapply(seq_along(files), function(i){
+#     
+#     fin <- files[i]
+#     
+#     fout <- file.path(
+#       gsub("6_distances", "7_sleep_clusters", dirname(fin)), file_out)
+#     
+#     sp <- gsub(".*/Studies/(.*)_(.*)/6_distances/.*", "\\1 \\2", fin)
+#     
+#     sleep_time <- ifelse(
+#       traits_dt[birdlife_name == sp, nocturnal] == 1, "day", "night")
+#     
+#     # load the data
+#     dcp_locs <- fread(fin)[ , ..cols_of_interest]
+#     
+#     dcp_locs[, n_sleep := sum(day_period == sleep_time), by = file]
+#     
+#     if(!any(dcp_locs$day_period == sleep_time) | all(dcp_locs$n_sleep <= 1)){
+#       
+#       fout <- gsub(".rds", "_nodata.rds", basename(fout))
+#       
+#       fwrite(unique(dcp_locs[, .(file, n_sleep)]), fout)
+#       rm(dcp_locs)
+#       
+#       return(NULL)
+#       
+#     }
+#     
+#     # subsetting dcp just for the sleeping points
+#     dcp_locs <- dcp_locs[day_period == sleep_time & n_sleep > 1]
+#     
+#     dcp_locs[, bfile := basename(file)]
+#     
+#     clust_dt <- fread(gsub(
+#       file_out, "2_dbscan_clusters/dbscan_clusters_npts_5_distthr_350.rds", fout))
+#     
+#     clust_dt[, bfile := basename(file)][, file := NULL]
+#     
+#     bfiles <- unique(clust_dt$bfile)
+#     
+#     #dcp_locs <- split(dcp_locs, by = "bfile")
+#     
+#     dbsc <- rbindlist(lapply(bfiles, function(bf){
+#       
+#       dcp_dt <- dcp_locs[bfile == bf]
+#       
+#       cls_dt <- clust_dt[bfile == bf][, bfile := NULL]
+#       
+#       cbind(dcp_dt, cls_dt)[, bfile := NULL]
+#       
+#     }))
+#     
+#     dbsc[
+#       , `:=`(
+#         revisit_day_cycle = c(0, diff(day_cycle)),
+#         revisit_timelag = c(NA, diff(t_median, units = "days"))
+#       ), by = .(file, cluster)]
+#     
+#     dbsc[
+#       , tracking_gap := {
+#         if (revisit_day_cycle > 1) {
+#           gap_days <- (day_cycle - revisit_day_cycle + 1):(day_cycle - 1)
+#           track_days <- dbsc[
+#             file == .BY$file & day_cycle %in% gap_days, day_cycle]
+#           length(gap_days) - length(track_days)
+#         } else 0
+#       }, by = .(file, day_cycle)
+#     ]
+#     
+#     setnames(dbsc, "cluster", "sleep_cluster")
+#     
+#     
+#     fwrite(dbsc, fout)
+#     
+#     rm(dbsc, dcp_locs, clust_dt)
+#     
+#     cat("DONE:", i, "|", nf, "\n")
+#     
+#     return(invisible(NULL))
+#     
+#   })
+#   
+# }
+
+
+
+# PLOT: revisit time ------------------------------------------------------
+
+
+fin_name <- "3_dbscan_clusters_npts_5_distthr_350_nauticalDawn_nauticalDusk.rds"
+
+files <- list.files(sleep_dirs, pattern = fin_name, full.names = T)
+nf <- length(files)
+
+pout_dir <- file.path(plots_dir, "3_revisits")
+dir.create(pout_dir, showWarnings = F)
+
+
+lapply(seq_along(files), function(i){
   
+  print(i)
+  
+  fin <- files[i]
+  sp <- gsub(".*/Studies/(.*)_(.*)/7_sleep_clusters/.*", "\\1 \\2", fin)
+  
+  cls_dt <- fread(fin)
+  
+  cls_dt[, n_per_file := .N, by = file]
+  
+  cls_dt <- cls_dt[n_per_file >= 10]
+  
+  if(nrow(cls_dt) == 0){ return(NULL) }
+  
+  cls_dt[, yd := day_cycle_to_yd(day_cycle)]
+  
+  n_trk <- uniqueN(cls_dt$file)
+  n_cls <- uniqueN(
+    paste0(cls_dt$file, cls_dt$sleep_cluster[cls_dt$sleep_cluster != 0]))
+  n_obs <- uniqueN(paste0(cls_dt$file, cls_dt$day_cycle)) 
+  n_yd <- uniqueN(cls_dt$yd)
+  n_zero <- sum(cls_dt$sleep_cluster == 0)
+
+  
+  cls_sum <- cls_dt[
+    , .(n_visits = .N), by = .(file, sleep_cluster)]
+  
+  cls_sum[, p_visits := n_visits / sum(n_visits), by = file]
+  cls_sum[, location_type := fifelse(
+    sleep_cluster == 0, "new location", "cluster")]
+  
+  pp <- cls_sum |> 
+    ggplot() +
+    geom_histogram(aes(x = p_visits, fill = location_type), binwidth = 0.01) +
+    theme_bw() + 
+    labs(x = "probability of (re)visiting") +
+    facet_wrap(~location_type, ncol = 1) +
+    theme(legend.position = "none")
+  
+  pn <- cls_sum |> 
+    ggplot() +
+    geom_histogram(aes(x = n_visits, fill = location_type), binwidth = 1) +
+    theme_bw() + 
+    labs(
+      x = "number of visits", 
+      y = ""
+    ) +
+    facet_wrap(~location_type, ncol = 1) +
+    theme(legend.position = "none")
+  
+  pp / pn +
+    plot_layout(guides = "collect", ncol = 2) +
+    plot_annotation(
+      title = sprintf("%s - revisit times across tracks [N = %d]", sp, n_trk),
+      subtitle = sprintf(
+        "totaling: %d nights | %d year days | %d clusters | %d unassigned nights", 
+        n_obs, n_yd, n_cls, n_zero)
+    )
+  
+  pname <- gsub(
+    ".rds", ".png", gsub("3_dbscan", gsub(" ", "_", sp), basename(fin)))
+  
+  ggsave(filename = file.path(pout_dir, pname), height = 10, width = 15)
+  
+  cat("\nProcessed:", i, "|", nf, " | ", sp, "\n")
   
 })
-
-
-
 
 
 # MEDIAN PLOTS
