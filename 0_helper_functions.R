@@ -270,6 +270,14 @@ add_season <- function(dt, t_col = NULL, y_col = NULL) {
 
 
 
+# FUNCTION: get_mode ------------------------------------------------------
+
+get_mode <- function(v) {
+  uniqv <- unique(v)
+  uniqv[which.max(table(match(v, uniqv)))]
+}
+
+
 # rename_to_birdlife <- function(df, species_name, add_phylo = F) {
 #   library(tidyverse)
 #   

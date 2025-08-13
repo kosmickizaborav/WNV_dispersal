@@ -12,6 +12,7 @@ library(sf)
 library(dbscan)
 library(ggplot2)
 library(patchwork)
+library(ggbreak)
 #source("6_distance_FUNCTIONS.R")
 source("6_distance_PLOT_FUNCTIONS.R")
 source("0_helper_functions.R")
@@ -466,6 +467,7 @@ if(nf > 0){
       
       clust_dbs <- dbscan(as.dist(st_distance(p_sf)), eps = 350, minPts = 5)
       p_locs$sleep_cluster <- as.integer(clust_dbs$cluster)
+      p_locs$core_point <- clust_dbs$isseed
       
       # return datatable
       as.data.table(p_locs)
@@ -616,6 +618,17 @@ rm(files, nf, file_out, fin_dcp)
 
 # PLOT: revisit time ------------------------------------------------------
 
+# probability of revisiting a roost: by the order of visit, the number of 
+# night spots that have been visited at least one time the number of night spots that 
+# have been visited at least two times - sight fidelity of night spots
+
+
+# PLOT: length of the tracks vs number of revisits
+
+
+
+
+
 
 fin_name <- "3_dbscan_clusters_npts_5_distthr_350_nauticalDawn_nauticalDusk.rds"
 
@@ -627,8 +640,6 @@ dir.create(pout_dir, showWarnings = F)
 
 
 lapply(seq_along(files), function(i){
-  
-  print(i)
   
   fin <- files[i]
   sp <- gsub(".*/Studies/(.*)_(.*)/7_sleep_clusters/.*", "\\1 \\2", fin)
@@ -643,38 +654,56 @@ lapply(seq_along(files), function(i){
   
   cls_dt[, yd := day_cycle_to_yd(day_cycle)]
   
+  cls_dt[, visit_time := 1:.N, by = .(file, sleep_cluster)]
+  cls_dt[sleep_cluster == 0, visit_time := 1]
+  
+  cls_dt[, location_type := fifelse(
+    sleep_cluster == 0, "new visits", "repeated visit")]
+  
   n_trk <- uniqueN(cls_dt$file)
   n_cls <- uniqueN(
     paste0(cls_dt$file, cls_dt$sleep_cluster[cls_dt$sleep_cluster != 0]))
   n_obs <- uniqueN(paste0(cls_dt$file, cls_dt$day_cycle)) 
   n_yd <- uniqueN(cls_dt$yd)
   n_zero <- sum(cls_dt$sleep_cluster == 0)
+  n_cluster <- sum(cls_dt$sleep_cluster != 0)
 
   
-  cls_sum <- cls_dt[
-    , .(n_visits = .N), by = .(file, sleep_cluster)]
+  # cls_sum <- cls_dt[
+  #   , .(n_visits = .N), by = .(file, sleep_cluster)]
+
+  #cls_sum[, p_visits := n_visits / sum(n_visits), by = file]
+  #cls_sum[, location_type := fifelse(
+  #  sleep_cluster == 0, "new visits", "cluster")]
   
-  cls_sum[, p_visits := n_visits / sum(n_visits), by = file]
-  cls_sum[, location_type := fifelse(
-    sleep_cluster == 0, "new location", "cluster")]
+  # pp <- cls_sum |> 
+  #   ggplot() +
+  #   geom_histogram(aes(x = p_visits, fill = location_type), binwidth = 0.01) +
+  #   theme_bw() + 
+  #   labs(x = "probability of (re)visiting") +
+  #   facet_wrap(~location_type, ncol = 1) +
+  #   theme(legend.position = "none")
+  # 
+  # pn <- cls_sum |> 
+  #   ggplot() +
+  #   geom_histogram(aes(x = n_visits, fill = location_type), binwidth = 1) +
+  #   theme_bw() + 
+  #   labs(
+  #     x = "number of visits", 
+  #     y = ""
+  #   ) +
+  #   facet_wrap(~location_type, ncol = 1) +
+  #   theme(legend.position = "none")
   
-  pp <- cls_sum |> 
+  cls_dt |>
     ggplot() +
-    geom_histogram(aes(x = p_visits, fill = location_type), binwidth = 0.01) +
-    theme_bw() + 
-    labs(x = "probability of (re)visiting") +
-    facet_wrap(~location_type, ncol = 1) +
-    theme(legend.position = "none")
-  
-  pn <- cls_sum |> 
-    ggplot() +
-    geom_histogram(aes(x = n_visits, fill = location_type), binwidth = 1) +
-    theme_bw() + 
+    geom_histogram(aes(x = visit_time, fill = location_type)) +
+    #scale_y_break(c(n_cls, n_zero)) +
+    theme_bw() +
     labs(
-      x = "number of visits", 
+      x = "number of visits",
       y = ""
     ) +
-    facet_wrap(~location_type, ncol = 1) +
     theme(legend.position = "none")
   
   pp / pn +
@@ -682,7 +711,7 @@ lapply(seq_along(files), function(i){
     plot_annotation(
       title = sprintf("%s - revisit times across tracks [N = %d]", sp, n_trk),
       subtitle = sprintf(
-        "totaling: %d nights | %d year days | %d clusters | %d unassigned nights", 
+        "totaling: %d nights | %d calendar days | %d clusters | %d new locations", 
         n_obs, n_yd, n_cls, n_zero)
     )
   
@@ -694,6 +723,8 @@ lapply(seq_along(files), function(i){
   cat("\nProcessed:", i, "|", nf, " | ", sp, "\n")
   
 })
+
+plot the average for the 
 
 
 # MEDIAN PLOTS
