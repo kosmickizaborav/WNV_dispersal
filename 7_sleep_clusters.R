@@ -724,9 +724,6 @@ lapply(seq_along(files), function(i){
   
 })
 
-plot the average for the 
-
-
 # MEDIAN PLOTS
 #
 # if(nf > 1){
