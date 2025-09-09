@@ -628,6 +628,223 @@ invisible(lapply(seq_along(files), function(i){
 
 
 
+
+
+
+
+# Plot data availability for report---------------------------------------------
+
+# INPUT
+files <- list.files(
+  dist_dirs, 
+  pattern = ".*max_active_steps_nauticalDawn_nauticalDusk_continent.rds", 
+  full.names = T)
+
+# OUTPUT
+fout <- file.path(graph_dir, "7_daily_distances_per_species_timeline.png")
+
+if(!file.exists(fout)){
+  
+  
+  month_dt <- get_month_limits()
+  
+  
+  # deployments counts -----------------------------------------------------------
+  
+  days_space <- 366
+  order_space <- 100
+  wdth <- 50
+  
+  depl_count <- rbindlist(lapply(seq_along(files), function(i){
+    
+    fin <- files[i]
+    
+    dt <- fread(fin)
+    
+    cat("\n", i, "of", length(files), "DONE!")
+    
+    data.table(
+      n_tracks = uniqueN(dt$file), 
+      n_tracks_eu = ifelse(
+        any(dt$continent== "Europe"), uniqueN(dt[continent == "Europe", file]), NA),  
+      species = gsub(".*/Studies/(.*)_(.*)/6_distances/.*", "\\1 \\2", fin)
+    )
+    
+  }))
+  
+  depl_count[, n_track_log := days_space+order_space+wdth*log10(n_tracks)]
+  depl_count[, n_track_eu_log := days_space+order_space+wdth*log10(n_tracks_eu)]
+  
+  depl_count <- add_birdlife_phylogeny(depl_count, species_name = "species")
+  depl_count[, ord_max := max(n_tracks), by = order]
+  
+  setorder(depl_count, ord_max, order, n_tracks, species)
+  depl_count[, sp_id := .I]
+  
+  order_dt <- depl_count[, .(
+    sp_max = max(sp_id) + 0.5, 
+    sp_min = min(sp_id) - 0.5, 
+    sp_med = as.numeric(median(sp_id)), 
+    n_order = .N, 
+    xmin = days_space, 
+    xmax = days_space+order_space
+  ), by = .(order)]
+  order_dt[, lab := ifelse(n_order > 2, order, "")]
+  
+  # DAILY COUNTS 
+  
+  daily_dt <- rbindlist(lapply(seq_along(files), function(i){
+    
+    fin <- files[i]
+    
+    dt <- fread(fin)[, yd := day_cycle_to_yd(day_cycle_1)][
+      , .(steps_per_day = .N), by = yd]
+    
+    cat("\n", i, "of", length(files), "DONE!")
+    
+    dt[
+      , species := gsub(".*/Studies/(.*)_(.*)/6_distances/.*", "\\1 \\2", fin)]
+    
+  }))
+  
+  daily_dt[, steps_cat := cut(steps_per_day, breaks = c(0, 1, 9, 30, Inf))]
+  daily_dt <- merge(daily_dt, depl_count, by = "species")
+  
+  sp_max <- max(depl_count$sp_id) + 0.5
+  
+  steps_col <- c("#BFBFBF", "#808080", "#595959", "#333333")
+  names(steps_col) <- levels(daily_dt$steps_cat)
+  yminmin <- -5
+  
+  month_box <- data.table(
+    xmin = min(month_dt$first_yd), 
+    xmax = max(month_dt$last_yd), 
+    ymin = yminmin, 
+    ymax = sp_max
+  )[, xmed := (xmin+xmax)/2]
+  
+  dep_bb <- days_space+order_space+wdth*c(0, 1, 2, 3)
+  
+  count_box <- data.table(
+    xmin = days_space + order_space, 
+    xmax = max(depl_count$n_track_log, na.rm = T), 
+    ymin = 0.5, 
+    ymax = sp_max, 
+    vline = dep_bb, 
+    lab = c(1, 10, 100, 1000)
+  )
+  
+  lab_box <- data.table(
+    xmin = c(1, days_space, days_space + order_space),
+    xmax = c(days_space, days_space + order_space, max(depl_count$n_track_log)),
+    ymin = sp_max, 
+    ymax = sp_max + 10, 
+    lab = c("number of daily distances per calendar day and species", "order", "number of deployments [log scale]\ndotted line = deployments in Europe")
+  )[, xmed := (xmin+xmax)/2]
+  
+  ggplot() +
+    geom_rect(
+      data = month_box,
+      aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+      fill = "white", color = "gray22",  linewidth = 0.5
+    ) +
+    geom_tile(
+      data = daily_dt, aes(x = yd, y = sp_id, fill = steps_cat), alpha = 0.8
+    ) +
+    geom_segment(
+      data = month_dt, 
+      aes(x = first_yd, xend = first_yd, y = month_box$ymin, yend = sp_max), 
+      color = "gray22", linewidth = 0.2
+    ) +
+    geom_text(data = month_dt, aes(y = yminmin/2, x = mid_yd, label = month)) +
+    geom_segment(
+      data = count_box, 
+      aes(x = vline, xend = vline, y = ymin, yend = ymax), 
+      color = "gray22", linewidth = 0.3
+    ) +
+    geom_rect(
+      data = unique(count_box[, .(xmin, xmax, ymin, ymax)]),
+      aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+      fill = NA, color = "gray22", linewidth = 0.5
+    ) +
+    geom_rect(
+      data = order_dt, 
+      aes(ymin = sp_min, ymax = sp_max, xmin = xmin, xmax = xmax, fill = order), 
+      alpha = 0.4, color = "gray22"
+    ) +
+    geom_text(
+      data = order_dt, 
+      aes(y = sp_med, x = days_space+wdth, label = lab), color = "gray22"
+    ) +
+    geom_rect(
+      data = depl_count,
+      aes(
+        ymin = sp_id-0.5, ymax = sp_id+0.5, 
+        xmin = days_space + order_space, xmax = n_track_log, fill = order), 
+      alpha = 0.6
+    ) + 
+    geom_segment(
+      data = depl_count,
+      aes(
+        x = days_space + order_space, xend = n_track_eu_log, 
+        y = sp_id, yend = sp_id), 
+      color = "white", linewidth = 1, linetype = "dotted"
+    ) +
+    geom_text(
+      data = count_box, 
+      aes(x = vline, y = -2.5, label = lab), color = "gray22", size = 3
+    ) +
+    geom_rect(
+      data = lab_box, 
+      aes(ymin = ymin, ymax = ymax, xmin = xmin, xmax = xmax), 
+      fill = "white", color = "gray22", linewidth = 0.5
+    ) +
+    geom_text(
+      data = lab_box, 
+      aes(y = ymax - 5, x = xmed, label = lab), 
+      color = "gray22", size = 3, fontface = "bold", vjust = c(0, 0.5, 0.5)
+    ) +
+    scale_fill_manual(
+      values = c(ord_col, steps_col), 
+      breaks = names(steps_col), 
+      labels = c("1", names(steps_col)[-1])
+    ) +
+    scale_y_continuous(
+      breaks = depl_count$sp_id, 
+      labels = depl_count$species,
+      expand = c(0, 0)
+    ) +
+    scale_x_continuous(
+      breaks = month_dt$first_yd, 
+      expand = c(0, 0)
+    ) +
+    labs(
+      x = "", 
+      y = "species", 
+      fill = "", 
+      title = "Number of deployments per species and data availability throughout a year",
+    ) +
+    coord_cartesian(clip = "off") +
+    theme_bw() +
+    theme(
+      axis.ticks = element_blank(), 
+      axis.text.y = element_text(family = "FreeSans", size = 6),
+      panel.border = element_blank(),
+      axis.title.x = element_text(hjust = 0), 
+      legend.text = element_text(size = 8),
+      legend.key.size = unit(0.5, "lines"), 
+      legend.position = c(0.4, 0.97),
+      legend.justification = c(1, 0.5),
+      legend.direction = "horizontal", 
+      plot.title = element_text(hjust = 0, size = 16, face = "bold")
+    ) 
+  
+  ggsave(fout, width = 35, height = 45, units = "cm") 
+  
+}
+
+
+
 # n_steps_limit <- 10
 # dist_limit <- 50
 # 

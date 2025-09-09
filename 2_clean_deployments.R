@@ -273,3 +273,60 @@ cleaned_tracks <- cleaned_tracks[
 
 fwrite(cleaned_tracks, file.path(data_dir, file_deploy_clean))
 
+
+# TABLE: problem summary for report---------------------------------------------
+
+# INPUT
+track_problems <- fread(file.path(data_dir, "2_track_problems_report.csv"))
+# check which files have data
+track_problems[, saved := !grepl("nodata", file)]
+
+# OUTPUT
+excluded <- fread(file.path(data_dir, "2_deployments_cleaned.csv"))[
+  , .(file, excluded)]
+track_problems <- merge(track_problems, excluded, by = "file", all.x = T)
+track_problems[, excluded := fifelse(is.na(excluded), F, excluded)]
+
+track_problems[
+  (track_problem %in% c("", NA) & saved == F), track_problem := "<= 3 positions"]
+track_problems[(track_problem %in% c("", NA) & excluded == T), 
+  track_problem := "duplicated deployments"]
+track_problems[, all_locs := sum(n_locs), by = file]
+track_problems[, prop_locs := round(n_locs / all_locs*100, 1)]
+
+
+problem_sum <- track_problems[ , .(
+  n_species = uniqueN(species),
+  n_tracks = uniqueN(file),
+  range_locs = paste(
+    quantile(n_locs, c(0.25, 0.75), na.rm = T), collapse = "-"),
+  median_locs = as.numeric(median(n_locs, na.rm = T)),
+  range_perc = paste(
+    quantile(prop_locs, c(0.25, 0.75), na.rm = T), collapse = "-"),
+  median_perc = as.numeric(median(prop_locs, na.rm = T))
+), by = .(track_problem)]
+
+problem_sum[, ":=" (
+  n_locs = paste0(median_locs, " [", range_locs, "]"), 
+  perc_locs = paste0(median_perc, " [", range_perc, "]")
+)]
+
+problem_sum[, track_problem := fcase(
+  track_problem == "", "cleaned and saved deployments",
+  track_problem == "duplicated timestamp (rounded to min)", "duplicated timestamp", 
+  track_problem == "hdop or vdop greater than 5", "high DOP",
+  track_problem == "<= 3 positions", "insufficient data",
+  track_problem == "weird date", "timestamp error", 
+  track_problem == "weird coordinates", "coordinates error", 
+  default = track_problem
+)]
+
+problem_sum <- problem_sum[, .(
+  track_problem, n_species, n_tracks, n_locs, perc_locs)]
+problem_sum[, depl := grepl("deployment", track_problem)]
+
+setorder(problem_sum, -depl, -n_tracks)
+
+problem_sum[, depl := NULL]
+
+fwrite(problem_sum, file.path(data_dir, "2_report_track_problems_summary.csv"))

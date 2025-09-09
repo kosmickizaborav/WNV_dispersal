@@ -13,7 +13,6 @@ source("color_palettes.R")
 # Corvus corone - avonet says "sedentary", birdlife full migrant
 
 
-
 data_dir <- here::here("Data")
 study_dir <- file.path(data_dir, "Studies")
 graphs_dir <- file.path(data_dir, "Graphs")
@@ -21,13 +20,18 @@ graphs_dir <- file.path(data_dir, "Graphs")
 dist_dirs <- file.path(list.files(study_dir, full.names = T), "6_distances")
 target_sp <- gsub(".*/Studies/(.*?)_(.*?)/6_distances.*", "\\1 \\2", dist_dirs)
 
+birdlife <- fread("Birdlife_migration_status.csv")[
+  , .(species, migration_birdlife)]
+birdlife[, migration_birdlife := tolower(migration_birdlife)]
 traits_dt <- fread(here::here("Published_data", "00_bird_traits.csv"))
 traits_dt[, activity := ifelse(nocturnal == 1, "nocturnal", "diurnal")]
 traits_dt <- unique(traits_dt[
-  , .(species = birdlife_name, migration = migration_txt, activity, order, family)])
+  , .(species = birdlife_name, migration_avonet = migration_txt, 
+      activity, order, family)])
 traits_dt <- traits_dt[species %in% target_sp]
+traits_dt <- merge(traits_dt, birdlife, by = "species", all.x = T)
 
-rm(target_sp)
+rm(target_sp, birdlife)
 
 # in case we want to check manipulations
 # deployments <- fread(file.path(data_dir, "1_deployments_to_download.csv"))
@@ -36,11 +40,7 @@ rm(target_sp)
 #   study_id, individual_id, deployment_id, file_type =  "")]
 
 
-fwrite(traits_dt, file.path(data_dir, "Traits.csv"))
-
-
 # 1 - Make overview table ------------------------------------------------------
-
 
 # INPUT
 fdt <- data.table(
@@ -162,7 +162,8 @@ lapply(1:nrow(fdt), function(i){
     # add traits and phylogeny
     species_dt <- merge(species_dt, traits_dt, by = "species", all.x = T)
     
-    cls <- c("species", "family", "order", "migration", "activity", "N_deployments")
+    cls <- c("species", "family", "order", "migration_avonet", 
+             "migration_birdlife", "activity", "N_deployments")
     
     setcolorder(species_dt, neworder = cls)
     
@@ -184,24 +185,44 @@ rm(fdt)
 
 
 
-
 # PLOT: median sl_ per species -------------------------------------------------
 
 files <- list.files(data_dir, pattern = "6_overview.*\\.csv", full.names = T)
 grupings <- c("migration", "order")
+migration_col <- "migration_birdlife"
 
 # check which already done
 files <- unique(unlist(lapply(grupings, function(o){
   
-  pname <- sprintf(gsub(".csv", "_%s.png", basename(files)), o)
+  pname <- sprintf(
+    gsub(".csv", "_%s_%s.png", basename(files)), o, migration_col)
   return(files[!file.exists(file.path(graphs_dir, "6_distances", pname))])
   
 })))
 
 nf <- length(files)
 
-move_col <- c("#A3DA8D", "#F4A460", "#781D42")
-names(move_col) <- c("sedentary", "partial", "migrant")
+if(grepl("avonet", migration_col)){
+  
+  # AVONET
+  #mlvl <- c("sedentary", "partial", "migrant")
+  mlbl <- c("sedentary", "partial migrant", "migrant")
+  move_col <- c("#A3DA8D", "#F4A460", "#781D42")
+  names(move_col) <- mlbl
+  
+} 
+
+
+if(grepl("birdlife", migration_col)){
+  
+  # BIRDLIFE
+ # mlvl <- c("sedentary", "nomadic", "altitude", "migrant")
+  mlbl <- c("sedentary", "nomadic", "altitudinal migrant", "migrant")
+  move_col <- c("#A3DA8D", "darkgreen", "pink", "#781D42")
+  names(move_col) <- mlbl
+  
+}
+
 
 if(nf > 0){
   
@@ -264,20 +285,21 @@ if(nf > 0){
     
     species_dt <- fread(fin)
     
+    species_dt <- species_dt[, migration := get(migration_col)]
+    
     species_dt <- species_dt[
       , .(species, N_steps, N_deployments, order, 
           sl_50, sl_25, sl_75, range_mode_100m, migration)]
     
     # make factors
     species_dt[, migration := fcase(
-      migration == "partially migratory", "partial", 
-      migration == "migratory", "migrant", 
+      # migration == "altitudinal migrant", "altitude migrant",
+      migration == "partially migratory", "partial migrant",
+      migration %in% c("migratory", "full migrant"), "migrant",
+      migration == "not a migrant", "sedentary",
       default = migration)]
     species_dt[
-      , migration := factor(
-        migration, 
-        levels = c("sedentary", "partial", "migrant"), 
-        labels = c("sedentary", "partial migrant", "migrant"))]
+      , migration := factor(migration, levels = mlbl)]
     
     species_dt[, mode_lim := as.numeric(
       sub(".*,\\s*([0-9\\.e\\+]+)\\]", "\\1", range_mode_100m))]
@@ -323,8 +345,6 @@ if(nf > 0){
         ymin = min(sp_id), 
         ymed = median(sp_id)), 
         by = by2]
-      # move_dt[, migration_txt := fifelse(
-      #   migration == "partial", "partial migrant", as.character(migration))]
       
       max75 <- max(species_dt$sl_75)
       
@@ -337,7 +357,6 @@ if(nf > 0){
         pscl <- c(-max75*0.02, -max75*0.08, -max75*0.33)
         
       }
-      
       
       subtit <- ifelse(
         grepl("median", fin), "median daily distance", "maximum daily distance")
@@ -397,7 +416,7 @@ if(nf > 0){
         ) +
         theme_bw() +
         scale_fill_manual(values = c(ord_col, move_col)) +
-        scale_color_manual(values = move_col) +
+        scale_color_manual(values = move_col, labels = mlbl) +
         labs(
           x = "distance [km]", 
           title =  sprintf(
@@ -431,7 +450,8 @@ if(nf > 0){
         top = 0.16  # fraction of plot height from bottom (0 to 1)
       )
       
-      pname <- sprintf(gsub(".csv", "_%s.png", basename(fin)), o)
+      pname <- sprintf(
+        gsub(".csv", "_%s_%s.png", basename(fin)), o, migration_col)
       
       ggsave(
         file.path(graphs_dir, "6_distances", pname), 
@@ -450,7 +470,6 @@ if(nf > 0){
 rm(files, nf, grupings)
 
 # PLOT: median sl_ per migration ---------------------------------------------------
-
 
 filters <- c("filter_30", "filter_10")
 
@@ -829,9 +848,9 @@ if(file.exists(file.path(graphs_dir, "6_distances", pname))){
   filter_wide <- dcast(filter_dt, species + order ~ filter, value.var = cols)
   filter_wide[, n_order := uniqueN(species), by = order]
   filter_wide[, ':=' (
-    perc_depl_10 = round(n_deployments_30/n_deployments_0*100, 1), 
-    perc_depl_30 = round((n_deployments_10 - n_deployments_30)/n_deployments_0*100, 1), 
-    perc_depl_0 = round((n_deployments_0 - n_deployments_10)/n_deployments_0*100, 1)
+    perc_depl_30 = round(n_dpl_30/n_dpl_0*100, 1), 
+    perc_depl_10 = round((n_dpl_10 - n_dpl_30)/n_dpl_0*100, 1), 
+    perc_depl_0 = round((n_dpl_0 - n_dpl_10)/n_dpl_0*100, 1)
   )]
   
   setorder(filter_wide, n_order, order, perc_depl_30, perc_depl_10)

@@ -32,6 +32,7 @@ library(ggplot2)
 library(patchwork)
 source("0_helper_functions.R")
 source("3_filter_by_speed_FUNCTIONS.R")
+source("color_palettes.R")
 
 # INPUT
 file_deploy_clean <- "2_deployments_cleaned.csv"
@@ -68,6 +69,8 @@ speed_limits_dt[
 # https://www.academia.edu/8538642/
 # Wild_ostrich_Struthio_camelus_ecology_and_physiology#loswp-work-container
 speed_limits_dt[birdlife_name == "Struthio camelus", speed_limit := 20] 
+
+fwrite(speed_limits_dt, file.path(data_dir, "3_speed_limits.csv"))
 
 # 2 - Plot speed and turning angles ---------------------------------------
 
@@ -337,4 +340,226 @@ filtered_report[, ':=' (
   track_saved = !grepl("nodata", file))]
 
 fwrite(filtered_report, file.path(data_dir, file_filter_report))
+
+
+
+
+# PLOT: speed limits full -------------------------------------------------
+
+sl_dt <- fread(file.path(data_dir, "3_speed_limits.csv"))
+
+# set order and assign a number to the species name
+sl_dt[, genus := tstrsplit(birdlife_name, " ", fixed = T)[[1]]]
+sl_dt[, sp_order := max(speed_limit), by = order]
+sl_dt[, sp_fam := max(speed_limit), by = family]
+setorder(sl_dt, sp_order, order, sp_fam, genus) # sp_fam
+sl_dt[, sp_id := .I]
+
+min_sp <- floor(min(sl_dt$speed_limit)/5) * 5
+max_sp <- ceiling(max(sl_dt$speed_limit)/5) * 5
+
+order_dt <- sl_dt[, .(
+  ymax = max(sp_id) + 0.5, 
+  ymin = min(sp_id) - 0.5, 
+  ymed = as.numeric(median(sp_id)), 
+  count = max(sp_id) - min(sp_id) + 1, 
+  xmin = max_sp, 
+  xmax = max_sp + 10,
+  xmed = max_sp + 5), 
+  by = .(sp_order, order)]
+order_dt[, lab := ifelse(count > 2, order, "")]
+
+
+sq_dt <- fread(file.path(data_dir, "3_target_sp_speed_quantiles.csv"))
+sq_dt <- melt(
+  sq_dt, 
+  id.vars = c("birdlife_name", "speed_limit", "order"),  
+  measure.vars = grep("%", names(sq_dt), value = T), 
+  variable.name = "quantile",
+  value.name = "speed"
+)[, quant := as.numeric(gsub("%", "", quantile))]
+sq_dt[, limit_exceeded := speed > speed_limit]
+
+min_quant <- min(sq_dt$quant[sq_dt$limit_exceeded])-5
+
+sq_dt <- sq_dt[quant >= min_quant]
+
+
+# all speeds fall below 70% quantile so not plotting below
+setorder(sq_dt, birdlife_name, quantile)
+
+sq_dt[, add := 1:.N, by = birdlife_name]
+sq_dt[, ':=' (
+  xmin = max_sp + 10 + (add-1)*2, 
+  xmax = max_sp + 10 + add*2)]
+sq_dt[, xmed := xmin + 1]
+# sq_dt[, qtxt := sprintf("(%d, %d%%]", quantile-5, quantile)]
+sq_dt[, order := fifelse(limit_exceeded, "none", order)]
+
+sq_dt <- merge(
+  sq_dt, 
+  sl_dt[, .(birdlife_name, sp_id)], 
+  by = "birdlife_name", 
+  all.x = T)
+
+# Numeric speed breaks
+speed_breaks <- seq(min_sp, max_sp, 5)
+speed_labels <- as.character(speed_breaks)
+
+# Quantile breaks and labels
+quantile_breaks <- unique(sq_dt$xmax)
+quantile_labels <- as.character(unique(sq_dt$quantile))
+
+# Combine them
+all_breaks <- c(speed_breaks, quantile_breaks[-length(quantile_breaks)])
+all_labels <- c(speed_labels, quantile_labels[-length(quantile_labels)])
+
+labs_dt <- data.table(
+  ymin = max(sl_dt$sp_id) + 0.5,
+  xmin = c(min_sp, max_sp, max_sp + 10),
+  xmax = c(max_sp, max_sp + 10, max(sq_dt$xmax)), 
+  lab = c("speed limit [m/s]", "order", "speed quantiles\nbelow the limit [%]")
+)
+
+sl_dt |> 
+  ggplot() +
+  geom_vline(
+    xintercept = seq(min_sp, max_sp, 5), 
+    color = "gray22", linetype = "dashed"
+  ) +
+  geom_point(
+    aes(y = sp_id, x = speed_limit, color = order), 
+    size = 3, shape = 15, alpha = 0.6
+  ) +
+  geom_rect(
+    data = order_dt,
+    aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, 
+        fill = order),  color = "gray22",
+    alpha = 0.4
+  ) +
+  geom_text(
+    data = order_dt, 
+    aes(y = ymed, x = 40, label = lab), 
+    vjust = 0.5, hjust = 0.5, 
+    color = "gray22"
+  ) +
+  geom_rect(
+    data = sq_dt,
+    aes(xmin = xmin, xmax = xmax, ymin = sp_id - 0.5, ymax = sp_id + 0.5, 
+        fill = order), 
+    color = NA, alpha = 0.6
+  ) +
+  geom_vline(
+    data = sq_dt, 
+    aes(xintercept = xmax), color = "gray22", linetype = "dashed"
+  ) +
+  geom_rect(
+    data = labs_dt, 
+    aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymin +10),
+    fill = "white", color = "gray22"
+  ) +
+  geom_text(
+    data = labs_dt, 
+    aes(y = ymin + 5, x = (xmin + xmax)/2, label = lab), 
+    vjust = 0.5, hjust = 0.5, 
+    color = "gray22", size = 4, fontface = "bold"
+  ) +
+  scale_y_continuous(
+    breaks = sl_dt$sp_id, 
+    labels = sl_dt$birdlife_name, 
+    expand = c(0, 0)
+  ) +
+  scale_x_continuous(
+    breaks = all_breaks,
+    labels = all_labels, 
+    guide = guide_axis(check.overlap = TRUE),
+    expand = c(0, 0)
+  ) +
+  theme_bw() +
+  scale_fill_manual(values = c(ord_col, "none" = "white")) +
+  scale_color_manual(values = ord_col) +
+  theme(
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_text(family = "FreeSans", size = 6),
+    plot.title = element_text(hjust = 0.5),
+    legend.position = "none"
+  ) +
+  labs(
+    y = "species", 
+    x = "speed limits vs. speed distribution"
+  ) 
+
+ggsave(
+  filename = file.path(graphs_dir, "3_speed_limits_complete.png"),
+  width = 25, height = 40, units = "cm"
+)
+
+
+# PLOT: Speed limits minimal---------------------------------------------------------
+
+# set order and assign a number to the species name
+# sl_dt[, genus := tstrsplit(birdlife_name, " ", fixed = TRUE)[[1]]]
+# sl_dt[, sp_order := max(speed_limit), by = order]
+# sl_dt[, sp_fam := max(speed_limit), by = family]
+# setorder(sl_dt, sp_order, order, sp_fam) # sp_fam
+# sl_dt[, sp_id := .I]
+# 
+# order_dt <- sl_dt[, .(
+#   ymax = max(sp_id)  + 0.5, 
+#   ymin = min(sp_id) - 0.5, 
+#   ymed = as.numeric(median(sp_id)), 
+#   count = max(sp_id) - min(sp_id) + 1), 
+#   by = .(sp_order, order)]
+# order_dt[, lab := ifelse(count > 2, order, "")]
+# 
+# sl_dt |> 
+#   ggplot() +
+#   geom_point(
+#     aes(y = sp_id, x = speed_limit, color = order), 
+#     size = 3, shape = 15, alpha = 0.6
+#   ) +
+#   geom_rect(
+#     data = order_dt,
+#     aes(xmin = 35, xmax = 45, ymin = ymin, ymax = ymax, 
+#         fill = order),  color = "gray33",
+#     alpha = 0.4
+#   ) +
+#   geom_text(
+#     data = order_dt, 
+#     aes(y = ymed, x = 40, label = lab), 
+#     vjust = 0.5, hjust = 0.5, 
+#     color = "gray33"
+#   ) +
+#   scale_y_continuous(
+#     breaks = sl_dt$sp_id, 
+#     labels = sl_dt$birdlife_name, 
+#     expand = c(0, 0)
+#   ) +
+#   scale_x_continuous(
+#     expand = c(0, 0),
+#     limits = c(10, 45),
+#     breaks = seq(10, 35, 5),
+#     guide = guide_axis(check.overlap = T)
+#   ) +
+#   theme_bw() +
+#   scale_fill_manual(values = ord_col) +
+#   scale_color_manual(values = ord_col) +
+#   theme(
+#     axis.title.y = element_blank(), 
+#     axis.ticks.y = element_blank(),
+#     axis.text.y = element_text(family = "FreeSans", size = 6),
+#     plot.title = element_text(hjust = 0.5),
+#     legend.position = "none"
+#   ) +
+#   labs(
+#     x = "speed [m/s]",
+#     y = "species", 
+#     title = "Speed thresholds grouped by order"
+#   )
+# 
+# ggsave(
+#   filename = file.path(graphs_dir, "3_speed_limits.png"),
+#   width = 20, height = 40, units = "cm"
+# )
+
 
