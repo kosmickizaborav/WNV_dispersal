@@ -8,9 +8,6 @@ pub_dir <- here::here("Published_data")
 
 # ALL FUNCTIONS ARE RAN BEFORE i SWITCHED TO DATATABLE, SO THEY ARE COMMETED
 # OUT UNTIL UPDATED THE FILES ARE KEPT AS THEY WERE
-# I redid the speed calculations, because I thought I summarized  them wrongly, 
-# but later realized it was true, so just left the old version with new 
-# loading, in case i messed up something
 
 # 1 - Birdlife classification -------------------------------------
 

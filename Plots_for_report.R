@@ -327,6 +327,7 @@ fout <- file.path(graph_dir, "6_daily_distances_per_species_timeline.png")
 if(!file.exists(fout)){
   
   source("6_distance_PLOT_FUNCTIONS.R")
+  source("0_helper_functions.R")
   
   month_dt <- get_month_limits()
   
@@ -418,7 +419,7 @@ if(!file.exists(fout)){
     xmax = c(days_space, days_space + order_space, max(depl_count$n_track_log)),
     ymin = sp_max, 
     ymax = sp_max + 10, 
-    lab = c("number of daily distances per calendar day and species", "order", "number of deployments [log scale]\ndotted line = deployments in Europe")
+    lab = c("number of daily distances per calendar day and species", "order", "number of deployments [log scale]\ndotted line = in Europe")
   )[, xmed := (xmin+xmax)/2]
   
   ggplot() +
@@ -500,8 +501,8 @@ if(!file.exists(fout)){
     labs(
       x = "", 
       y = "species", 
-      fill = "", 
-      title = "Number of deployments per species and data availability throughout a year",
+      fill = "N per day", 
+      title = "Number of daily distances measured throughout a year",
     ) +
     coord_cartesian(clip = "off") +
     theme_bw() +
@@ -510,10 +511,11 @@ if(!file.exists(fout)){
       axis.text.y = element_text(family = "FreeSans", size = 6),
       panel.border = element_blank(),
       axis.title.x = element_text(hjust = 0), 
-      legend.text = element_text(size = 8),
-      legend.key.size = unit(0.5, "lines"), 
-      legend.position = c(0.4, 0.97),
-      legend.justification = c(1, 0.5),
+      # legend.text = element_text(size = 8),
+      # legend.key.size = unit(0.5, "lines"), 
+      # legend.position = c(0.4, 0.97),
+      # legend.justification = c(1, 0.5),
+      legend.position = "bottom",
       legend.direction = "horizontal", 
       plot.title = element_text(hjust = 0, size = 16, face = "bold")
     ) 
@@ -534,7 +536,7 @@ files <- list.files(
 
 pname <- "6_data_loss_with_filtering.png"
 
-if(file.exists(file.path(graphs_dir, pname))){
+if(file.exists(file.path(graph_dir, pname))){
   
   source("0_helper_functions.R")
   
@@ -636,7 +638,10 @@ if(file.exists(file.path(graphs_dir, pname))){
     ymin = c(0, 100, 120), 
     ymax = c(100, 120, max(depl_count$n_track_log)), 
     ymed = c(50, 110, mean(c(120, max(depl_count$n_track_log)))),
-    lab = c("deployments after filtering [%]", "order", "total number\nof deployments\n[log scale]")
+    lab = c(
+      "deployments after filtering [%]", 
+      "order", 
+      "total number\nof deployments\n[log scale]")
   )
   
   ggplot() +
@@ -696,16 +701,17 @@ if(file.exists(file.path(graphs_dir, pname))){
     theme(
       axis.ticks = element_blank(), 
       legend.text = element_text(size = 8),
-      legend.key.size = unit(1, "lines"), 
-      legend.position = c(0.45, 0.965),
-      legend.justification = c(1, 0.5),
+      #legend.key.size = unit(1, "lines"), 
+      legend.position = "bottom",
+      # legend.position = c(0.45, 0.965),
+      # legend.justification = c(1, 0.5),
       legend.direction = "horizontal", 
       plot.title = element_text(hjust = 0, size = 16, face = "bold")
     ) +
     labs(
       x = "", 
       y = "", 
-      fill = "", 
+      fill = "filter", 
       title = "Loss of daployments with filtering", 
       subtitle = "filtering criteria = min number of distance measures per deployment"
     )
@@ -717,6 +723,402 @@ if(file.exists(file.path(graphs_dir, pname))){
 
 
 
-# distance at night -------------------------------------------------------
+# P-5: SigFox vs. GPS -------------------------------------------------------
+
+
+# INPUT
+files <- list.files(
+  file.path(list.files(study_dir, full.names = T), "6_distances"), 
+  pattern = ".*max_active_steps_nauticalDawn_nauticalDusk_continent.rds", 
+  full.names = T)
+
+pname <- "6_sigfox_vs_gps.png"
+
+
+if(!file.exists(file.path(graph_dir, pname))){
+  
+  scl <- 0.5
+  perc_space <- 100*scl
+  order_space <- 20
+  wdth <- 10
+  
+  source("0_helper_functions.R")
+  
+  full_dt <- rbindlist(lapply(seq_along(files), function(i){
+    
+    fin <- files[i]
+    
+    file_list <- unique(fread(fin)[, file])
+
+    data.table(
+      n_tracks = length(file_list),
+      n_gps = sum(grepl("dep_653_sen", file_list)),
+      n_sigfox = sum(grepl("dep_2299894820_sen", file_list)),
+      species = gsub(".*/Studies/(.*)_(.*)/6_distances/.*", "\\1 \\2", fin)
+    )
+    
+  }))
+  
+  sensor_col <- c("SigFox" = "#FFD35A", "GPS" = "#26355D")
+  
+  full_dt[, ':=' (
+      perc_sigfox = round(n_sigfox/n_tracks*100, 1), 
+      perc_gps = round(n_gps/n_tracks*100, 1)
+  )]
+  
+  p_dt <- melt(
+    full_dt,
+    id.vars = "species",
+    measure.vars = c("perc_gps", "perc_sigfox"),
+    variable.name = "sensor",
+    value.name = "percent"
+  )
+  p_dt[, sensor := factor(
+    sensor,
+    levels = c("perc_gps", "perc_sigfox"),
+    labels = c("GPS", "SigFox")
+  )]
+  p_dt[, percent := percent*scl]
+  
+  depl_count <- rbindlist(lapply(seq_along(files), function(i){
+    
+    fin <- files[i]
+    dt <- fread(fin)
+    
+    data.table(
+      n_tracks = uniqueN(dt$file), 
+      n_tracks_eu = ifelse(
+        any(dt$continent== "Europe"), uniqueN(dt[continent == "Europe", file]), NA),  
+      species = gsub(".*/Studies/(.*)_(.*)/6_distances/.*", "\\1 \\2", fin)
+    )
+    
+  }))[, ':=' (
+    n_track_log = perc_space+order_space+wdth*log10(n_tracks), 
+    n_track_eu_log = perc_space+order_space+wdth*log10(n_tracks_eu))]
+  
+  dep_bb <- seq(0, floor(max(log10(depl_count$n_tracks))), 1)
+  
+  logs <- perc_space+order_space + wdth*dep_bb
+  log_lab <- 10^dep_bb
+  
+  depl_count <- add_birdlife_phylogeny(depl_count, species_name = "species")
+  depl_count[, ord_max := max(n_tracks), by = order]
+  
+  
+  setorder(depl_count, ord_max, order, n_tracks, species)
+  depl_count[, sp_id := .I]
+  
+  order_dt <- depl_count[, .(
+    xmax = max(sp_id) + 0.5, 
+    xmin = min(sp_id) - 0.5, 
+    xmed = as.numeric(median(sp_id)), 
+    n_order = uniqueN(species), 
+    ymin = perc_space, 
+    ymax = perc_space+order_space, 
+    ymed = perc_space+ order_space/2
+  ), by = order]
+  order_dt[, lab := ifelse(n_order > 2, order, "")]
+  
+  p_dt <- merge(p_dt, depl_count[, .(species, sp_id)], by = "species")
+  
+  dpl_lbl <- data.table(
+    xmin = max(p_dt$sp_id), 
+    xmax = max(p_dt$sp_id)+10,
+    xmed = max(p_dt$sp_id)+5,
+    ymin = c(0, perc_space, perc_space+order_space), 
+    ymax = c(perc_space, perc_space+order_space, max(depl_count$n_track_log)), 
+    ymed = c(
+      perc_space/2, 
+      perc_space+order_space/2, 
+      perc_space+order_space+max(log10(depl_count$n_tracks))*wdth/2
+    ),
+    lab = c(
+      "deployments GPS vs. SigFox [%]", 
+      "order", 
+      "total number\nof deployments\n[log scale]")
+  )
+  
+  ggplot() +
+    geom_rect(
+      data = order_dt,
+      aes(ymin = ymin, ymax = ymax, xmin = xmin, xmax = xmax, 
+          fill = order),  color = "gray22", alpha = 0.3
+    ) +
+    geom_text(
+      data = order_dt, 
+      aes(y = ymed, x = xmed, label = lab), 
+      vjust = 0.5, hjust = 0.5, 
+      color = "gray22"
+    ) +
+    geom_rect(
+      data = depl_count, 
+      aes(ymin = perc_space+order_space, ymax = n_track_log,
+          xmin = sp_id-0.5, xmax = sp_id+0.5, fill = order), alpha = 0.6
+    ) +
+    geom_segment(
+      data = depl_count, 
+      aes(y = perc_space+order_space, yend = n_track_eu_log, x = sp_id), 
+      alpha = 0.8, color = "white", linewidth = 1, linetype = "dotted"
+    ) +
+    geom_bar(
+      data = p_dt,
+      aes(x = sp_id, y = percent, fill = sensor), 
+      stat = "identity", width = 1, alpha = 0.7
+    ) +
+    geom_hline(
+      aes(yintercept = c(seq(10, 100, 10)*scl, logs)), color = "gray22"
+    ) +
+    geom_vline(
+      data = order_dt, aes(xintercept = xmin), color = "gray22"
+    ) +
+    geom_rect(
+      data = dpl_lbl,
+      aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+      fill = "white", color = "gray22"
+    ) +
+    geom_text(
+      data = dpl_lbl,
+      aes(x = xmed, y = ymed, label = lab), 
+      vjust = c(0, 0.5, 0.5), fontface = "bold", size = 5
+    ) +
+    coord_flip() +
+    scale_fill_manual(
+      values = c(ord_col, sensor_col), 
+      breaks = names(sensor_col) 
+    ) +
+    scale_x_continuous(
+      breaks = depl_count$sp_id, 
+      labels = depl_count$species, 
+      expand = c(0, 0)) +
+    scale_y_continuous(
+      expand = c(0, 0),
+      breaks = c(seq(0, 100, 10)*scl, logs), 
+      labels = c(paste0(seq(0, 100, 10), "%"), log_lab)
+    ) +
+    theme_bw() +
+    theme(
+      axis.ticks = element_blank(), 
+      #legend.text = element_text(size = 8),
+      #legend.key.size = unit(1, "lines"), 
+      legend.position = "bottom",
+      legend.direction = "horizontal", 
+      plot.title = element_text(hjust = 0, size = 16, face = "bold")
+    ) +
+    labs(
+      x = "", 
+      y = "", 
+      fill = "sensor", 
+      title = "Deployments with GPS vs. SigFox"
+    )
+  
+  ggsave(file.path(graph_dir, pname), height = 26, width = 15)
+  
+  
+}
+
+
+
+# relocations -------------------------------------------------------------
+
+file_dep_filter <- "1_deployments_to_download.csv"
+deployments <- fread(file.path(data_dir, file_dep_filter))[
+  , file_id := paste0(
+    study_id, "_stu_", individual_id, "_ind_", deployment_id)][
+  , .(file_id, manipulation_type)]
+
+# INPUT
+files <- list.files(
+  file.path(list.files(study_dir, full.names = T), "6_distances"), 
+  pattern = ".*max_active_steps_nauticalDawn_nauticalDusk_continent.rds", 
+  full.names = T)
+
+pname <- "6_relocations.png"
+
+
+if(!file.exists(file.path(graph_dir, pname))){
+  
+  scl <- 0.5
+  perc_space <- 100*scl
+  order_space <- 20
+  wdth <- 10
+  
+  source("0_helper_functions.R")
+  
+  full_dt <- rbindlist(lapply(seq_along(files), function(i){
+    
+    fin <- files[i]
+    
+    dt <- fread(fin)[, file_id := gsub("_dep_.*$", "", basename(file))]
+    
+    dt <- merge(dt, deployments, by = "file_id", all.x = T)
+    
+    dt <- unique(dt[, .(file, manipulation_type)])
+    
+    dt[, .(
+        n_tracks = uniqueN(file), 
+        n_relocated = sum(manipulation_type == "relocated"),
+        n_none = sum(manipulation_type == "none"))][
+      , species := gsub(".*/Studies/(.*)_(.*)/6_distances/.*", "\\1 \\2", fin)]
+    
+  }))
+  
+  manipulation_col <- c("relocation" = "#f7aef8", "none" = "#2e294e")
+  
+  full_dt[, ':=' (
+    perc_relocated = round(n_relocated/n_tracks*100, 1), 
+    perc_none = round(n_none/n_tracks*100, 1)
+  )]
+  
+  p_dt <- melt(
+    full_dt,
+    id.vars = "species",
+    measure.vars = c("perc_relocated", "perc_none"),
+    variable.name = "manipulation",
+    value.name = "percent"
+  )
+  p_dt[, manipulation := factor(
+    manipulation,
+    levels = c("perc_relocated", "perc_none"),
+    labels = c("relocation", "none")
+  )]
+  p_dt[, percent := percent*scl]
+  
+  depl_count <- rbindlist(lapply(seq_along(files), function(i){
+    
+    fin <- files[i]
+    dt <- fread(fin)
+    
+    data.table(
+      n_tracks = uniqueN(dt$file), 
+      n_tracks_eu = ifelse(
+        any(dt$continent== "Europe"), uniqueN(dt[continent == "Europe", file]), NA),  
+      species = gsub(".*/Studies/(.*)_(.*)/6_distances/.*", "\\1 \\2", fin)
+    )
+    
+  }))[, ':=' (
+    n_track_log = perc_space+order_space+wdth*log10(n_tracks), 
+    n_track_eu_log = perc_space+order_space+wdth*log10(n_tracks_eu))]
+  
+  dep_bb <- seq(0, floor(max(log10(depl_count$n_tracks))), 1)
+  
+  logs <- perc_space+order_space + wdth*dep_bb
+  log_lab <- 10^dep_bb
+  
+  depl_count <- add_birdlife_phylogeny(depl_count, species_name = "species")
+  depl_count[, ord_max := max(n_tracks), by = order]
+  
+  
+  setorder(depl_count, ord_max, order, n_tracks, species)
+  depl_count[, sp_id := .I]
+  
+  order_dt <- depl_count[, .(
+    xmax = max(sp_id) + 0.5, 
+    xmin = min(sp_id) - 0.5, 
+    xmed = as.numeric(median(sp_id)), 
+    n_order = uniqueN(species), 
+    ymin = perc_space, 
+    ymax = perc_space+order_space, 
+    ymed = perc_space+ order_space/2
+  ), by = order]
+  order_dt[, lab := ifelse(n_order > 2, order, "")]
+  
+  p_dt <- merge(p_dt, depl_count[, .(species, sp_id)], by = "species")
+  
+  dpl_lbl <- data.table(
+    xmin = max(p_dt$sp_id), 
+    xmax = max(p_dt$sp_id)+10,
+    xmed = max(p_dt$sp_id)+5,
+    ymin = c(0, perc_space, perc_space+order_space), 
+    ymax = c(perc_space, perc_space+order_space, max(depl_count$n_track_log)), 
+    ymed = c(
+      perc_space/2, 
+      perc_space+order_space/2, 
+      perc_space+order_space+max(log10(depl_count$n_tracks))*wdth/2
+    ),
+    lab = c(
+      "deployments relocation vs. none [%]", 
+      "order", 
+      "total number\nof deployments\n[log scale]")
+  )
+  
+  ggplot() +
+    geom_rect(
+      data = order_dt,
+      aes(ymin = ymin, ymax = ymax, xmin = xmin, xmax = xmax, 
+          fill = order),  color = "gray22", alpha = 0.3
+    ) +
+    geom_text(
+      data = order_dt, 
+      aes(y = ymed, x = xmed, label = lab), 
+      vjust = 0.5, hjust = 0.5, 
+      color = "gray22"
+    ) +
+    geom_rect(
+      data = depl_count, 
+      aes(ymin = perc_space+order_space, ymax = n_track_log,
+          xmin = sp_id-0.5, xmax = sp_id+0.5, fill = order), alpha = 0.6
+    ) +
+    geom_segment(
+      data = depl_count, 
+      aes(y = perc_space+order_space, yend = n_track_eu_log, x = sp_id), 
+      alpha = 0.8, color = "white", linewidth = 1, linetype = "dotted"
+    ) +
+    geom_bar(
+      data = p_dt,
+      aes(x = sp_id, y = percent, fill = manipulation), 
+      stat = "identity", width = 1, alpha = 0.7
+    ) +
+    geom_hline(
+      aes(yintercept = c(seq(10, 100, 10)*scl, logs)), color = "gray22"
+    ) +
+    geom_vline(
+      data = order_dt, aes(xintercept = xmin), color = "gray22"
+    ) +
+    geom_rect(
+      data = dpl_lbl,
+      aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+      fill = "white", color = "gray22"
+    ) +
+    geom_text(
+      data = dpl_lbl,
+      aes(x = xmed, y = ymed, label = lab), 
+      vjust = c(0, 0.5, 0.5), fontface = "bold", size = 5
+    ) +
+    coord_flip() +
+    scale_fill_manual(
+      values = c(ord_col, manipulation_col), 
+      breaks = names(manipulation_col) 
+    ) +
+    scale_x_continuous(
+      breaks = depl_count$sp_id, 
+      labels = depl_count$species, 
+      expand = c(0, 0)) +
+    scale_y_continuous(
+      expand = c(0, 0),
+      breaks = c(seq(0, 100, 10)*scl, logs), 
+      labels = c(paste0(seq(0, 100, 10), "%"), log_lab)
+    ) +
+    theme_bw() +
+    theme(
+      axis.ticks = element_blank(), 
+      #legend.text = element_text(size = 8),
+      #legend.key.size = unit(1, "lines"), 
+      legend.position = "bottom",
+      legend.direction = "horizontal", 
+      plot.title = element_text(hjust = 0, size = 16, face = "bold")
+    ) +
+    labs(
+      x = "", 
+      y = "", 
+      fill = "manipulation", 
+      title = "Deployments with relocation vs. none"
+    )
+  
+  ggsave(file.path(graph_dir, pname), height = 26, width = 15)
+  
+  
+}
+
+
 
 
