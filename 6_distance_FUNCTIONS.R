@@ -111,6 +111,8 @@ add_day_cycle <- function(track, day_limits = NULL, add_day_limits = F){
 
 # FUNCTION 2: get_dcp_dist ------------------------------------------------
 
+library(circular)
+
 # Function to process each file
 get_dcp_dist <- function(
     track, 
@@ -150,12 +152,19 @@ get_dcp_dist <- function(
     
   }
   
+  to_circular <- (max(track_dt$x_) - min(track_dt$x_)) > 180
+  
+  if(to_circular){
+    track_dt[, x_circ := circular::circular(x_, units="degrees", template="geographics")]
+  }
+
+  
   # Split into groups for each dcp
   # Group by dcp and calculate summaries
   dcp_median <- track_dt[, c(
       list(n_locs = first(n_locs)),
       list(
-        x_median = median(x_),
+        x_median = if(to_circular) as.numeric(circular::median.circular(x_circ)) else median(x_),
         y_median = median(y_),
         t_median = median(t_)
       ),

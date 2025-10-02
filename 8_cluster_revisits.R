@@ -42,6 +42,7 @@ traits_dt <- unique(traits_dt[species %in% target_sp])
 # window size
 wdw <- 7 # days
 n_wdw <- 4 # weeks
+max_wdw <- wdw*n_wdw
 max_gap <- 0
 
 quants <- c(0.25, 0.5, 0.75)
@@ -51,7 +52,7 @@ quants <- c(0.25, 0.5, 0.75)
 
 fin_name <- "3_dbscan_clusters_npts_5_distthr_350_nauticalDawn_nauticalDusk.rds"
 fout_name <- sprintf(
-  "1_sleep_clusters_bursts_%d_window_%d_gap.rds", wdw*n_wdw, max_gap)
+  "1_sleep_clusters_bursts_%d_window_%d_gap.rds", max_wdw, max_gap)
 
 files <- list.files(cluster_dirs, pattern = fin_name, full.names = T)
 files_out <- file.path(
@@ -101,12 +102,12 @@ if(nf > 0){
     ), by = .(file, burst)]
     
     # select only the bursts that would have enough data for the revisiting analysis
-    dcp_dt <- dcp_dt[burst_length >= wdw*n_wdw]
+    dcp_dt <- dcp_dt[burst_length >= max_wdw]
     
     if(nrow(dcp_dt) == 0){
       
       fout <- gsub(".rds", "_nodata.rds", fout)
-      fwrite(data.table(burst_length = wdw*n_wdw), fout)
+      fwrite(data.table(burst_length = max_wdw), fout)
       
     } else{
       
@@ -134,19 +135,416 @@ if(nf > 0){
 rm(fout_name, fin_name, files, files_out)
 
 
-# PLOT: Time to first revisit---------------------------------------------------
+
+
+# Data summary ------------------------------------------------------------
 
 fin_name <- sprintf(
-  "1_sleep_clusters_bursts_%d_window_%d_gap.rds", wdw*n_wdw, max_gap)
+  "1_sleep_clusters_bursts_%d_window_%d_gap.rds", max_wdw, max_gap)
+files <- list.files(revisit_dirs, pattern = fin_name, full.names = T)
+
+stats_dt <- rbindlist(lapply(seq_along(files), function(n){
+  
+  fin <- files[n]
+  dcp_dt <- fread(fin)
+  
+  revisit_per_patch <- dcp_dt[sleep_cluster > 0][
+    , .(n_revisits = sum(revisit_day_cycle > 0, na.rm = T)),
+    by = .(file, burst, sleep_cluster)][
+    , .(
+      median_revisit_per_patch = median(n_revisits), 
+      max_revisit_per_patch = max(n_revisits), 
+      min_revisit_per_patch = min(n_revisits)
+    ), by = .(file, burst)]
+  
+  
+  dcp_track <- dcp_dt[, .(
+    n_nights = uniqueN(day_cycle), 
+    n_patches = uniqueN(sleep_cluster[sleep_cluster != 0]),
+    n_first_visit = sum(sleep_cluster == 0 | revisit_day_cycle == 0),
+    n_revisits = as.numeric(
+      if(all(is.na(revisit_day_cycle))) 0 else sum(revisit_day_cycle > 0, na.rm = T))
+  ), by = .(file, burst)]
+  
+  
+  merge(dcp_track, revisit_per_patch, by = c("file", "burst"), all.x = T)
+  
+}))
+
+# add species and order
+stats_dt[, species := gsub(
+  ".*Studies/(.*?)_(.*?)/5_flag_static/.*", "\\1 \\2", file)]
+
+stats_dt <- merge(
+  stats_dt, traits_dt[, .(species, order)], by = "species", all.x = T)
+
+stats_dt[, file := basename(file)]
+
+setcolorder(
+  stats_dt, 
+  neworder = c("order", "species", "file", "burst")
+)
+
+fwrite(
+  setnames(copy(stats_dt), old = c("burst", "file"), new = c("segment_id", "track_id")), 
+  file.path(data_dir, "8_cluster_revisits_segment_summary.csv")
+)
+
+stats_dt[, n_order := uniqueN(species), by = order]
+
+stats_dt[, n_nights_log := log10(n_nights)]
+
+stats_dt[, ':=' (
+  median_n = as.numeric(median(n_nights)), 
+  lower_n = quantile(n_nights, 0.25)-1.5*IQR(n_nights),
+  upper_n = quantile(n_nights, 0.75)+1.5*IQR(n_nights)),
+  by = species]
+
+
+setorder(stats_dt, n_order, order, -median_n)
+stats_dt[, sp_id := .GRP, by = species]
+
+
+
+sample_max <- ceiling(max(stats_dt$n_nights_log))
+
+order_dt <- stats_dt[, .(
+  ymax = max(sp_id) + 0.5, 
+  ymin = min(sp_id) - 0.5,
+  n_order = uniqueN(species), 
+  xmin = sample_max, 
+  xmax = sample_max*1.3, 
+  xmed = sample_max*1.15
+), by = order][, ymed := (ymax + ymin)/2, by = order]
+order_dt[, lab := ifelse(n_order > 2, order, "")]
+
+
+total_dt <- stats_dt[, .(
+  n_bursts = uniqueN(paste(burst, file)), 
+  n_depl = uniqueN(file)), 
+  by = .(order, species, sp_id)]
+total_dt[, ':=' (
+  n_bursts_log = log10(n_bursts)*sample_max*0.1+sample_max*1.31, 
+  n_depl_log = log10(n_depl)*sample_max*0.1+sample_max*1.31)]
+
+
+logs <- 0:floor(max(c(log10(total_dt$n_bursts), log10(total_dt$n_depl))))
+logs_x <- logs*sample_max*0.1+sample_max*1.31
+logs_lab <- 10^logs
+
+logs_base <- min(floor(stats_dt$n_nights_log)):max(floor(stats_dt$n_nights_log))
+logs_base_lab <- 10^logs_base
+
+xmin <- floor(log10(min(stats_dt$n_nights)))
+xmax <- ceiling(max(total_dt$n_bursts_log))
+
+sp_max <- max(stats_dt$sp_id) + 0.5
+
+lab_box <- data.table(
+  xmin = c(xmin, sample_max, sample_max*1.3),
+  xmax = c(sample_max, sample_max*1.3, xmax),
+  ymin = sp_max, 
+  ymax = sp_max + 10, 
+  ymed = sp_max + 5, 
+  lab = c(
+    "duration of a continuous track segments\n[number of nights per segment]", 
+    "bird order", 
+    "total number of\ntrack segments (bars) and\ntracks (points)")
+)[, xmed := (xmin+xmax)/2]
+
+
+
+              
+stats_dt |> 
+  ggplot() + 
+  geom_rect(
+    data = order_dt,
+    aes(ymin = ymin, ymax = ymax, xmin = xmin, xmax = xmax, 
+        fill = order),  color = "gray22",
+    alpha = 0.3
+  ) +
+  geom_text(
+    data = order_dt, 
+    aes(y = ymed, x = xmed, label = lab), 
+    vjust = 0.5, hjust = 0.5, 
+    color = "gray22"
+  ) +
+  geom_boxplot(
+    aes(y = sp_id, x = n_nights_log, group = sp_id, fill = order), 
+    outlier.colour = "gray66", alpha = 0.8, color = "gray33", outliers = T
+  ) +
+  geom_rect(
+    data = total_dt, 
+    aes(xmin = sample_max*1.3, xmax = n_bursts_log,
+        ymin = sp_id-0.5, ymax = sp_id+0.5, fill = order), alpha = 0.6
+  ) +
+  geom_vline(
+    xintercept = logs_x, linetype = "dashed", color = "gray44"
+  ) +
+  geom_point(
+    data = total_dt, 
+    aes(x = n_depl_log, y = sp_id), 
+    shape = 21, fill = "gray22", color = "white", size = 2
+  ) +
+  geom_rect(
+    data = lab_box, 
+    aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax), 
+    fill = "white", color = "gray22"
+  ) +
+  geom_text(
+    data = lab_box,
+    aes(x = xmed, y = ymed, label = lab),
+    hjust = 0.5, vjust = 0.5, color = "gray22", size = 3, fontface = "bold"
+  ) +
+  scale_fill_manual(values = ord_col) +
+  scale_y_continuous(
+    breaks = total_dt$sp_id, labels = total_dt$species, expand = c(0,0)
+  ) +
+  scale_x_continuous(
+    breaks = c(logs_base, logs_x),
+    labels = c(logs_base_lab, logs_lab),
+    expand = c(0,0), 
+    limits = c(xmin, NA)
+  ) +
+  labs(
+    x = "left: duration of track segment [number of nights]\nvs.\nright: total number of tracks (point) and segments (bars)",
+    y = "species",
+    title = "Duration of continuous track segments"
+  ) +
+  theme_bw() +
+  theme(
+    legend.position = "none", 
+    plot.title = element_text(face = "bold", vjust = 0.5)
+  )
+
+
+
+ggsave(
+  filename = file.path(graphs_dir, "8_segment_duration_overview.png"),
+  width = 12, height = 15, dpi = 300, bg = "white"
+)
+
+
+
+# revisits ----------------------------------------------------------------
+
+
+# REVISITS
+total_dt <- stats_dt[, .(
+  n_patches = sum(n_patches), 
+  n_depl = uniqueN(file), 
+  lower_n = quantile(n_patches, 0.25)-1.5*IQR(n_patches),
+  upper_n = quantile(n_patches, 0.75)+1.5*IQR(n_patches)), 
+  by = .(order, species, sp_id)]
+
+
+sample_max <- ceiling(max(total_dt$upper_n))
+
+total_dt[, ':=' (
+  n_patches_log = log10(n_patches)*sample_max*0.1+sample_max*1.31, 
+  n_depl_log = log10(n_depl)*sample_max*0.1+sample_max*1.31)]
+
+
+
+
+order_dt <- stats_dt[, .(
+  ymax = max(sp_id) + 0.5, 
+  ymin = min(sp_id) - 0.5,
+  n_order = uniqueN(species), 
+  xmin = sample_max, 
+  xmax = sample_max*1.3, 
+  xmed = sample_max*1.15
+), by = order][, ymed := (ymax + ymin)/2, by = order]
+order_dt[, lab := ifelse(n_order > 2, order, "")]
+
+
+
+
+
+logs <- 0:floor(max(log10(c(total_dt$n_patches, total_dt$n_depl))))
+logs_x <- logs*sample_max*0.1+sample_max*1.31
+logs_lab <- 10^logs
+
+sp_max <- max(stats_dt$sp_id) + 0.5
+
+lab_box <- data.table(
+  xmin = c(0, sample_max, sample_max*1.3),
+  xmax = c(
+    sample_max, sample_max*1.3, max(total_dt$n_patches_log)),
+  ymin = sp_max, 
+  ymax = sp_max + 10, 
+  ymed = sp_max + 5, 
+  lab = c(
+    "number of patches per track segment", 
+    "bird order", 
+    "total number of\npatches (bars) and\ntracks (points)")
+)[, xmed := (xmin+xmax)/2]
+
+
+
+
+stats_dt |> 
+  ggplot() + 
+  geom_rect(
+    data = order_dt,
+    aes(ymin = ymin, ymax = ymax, xmin = xmin, xmax = xmax, 
+        fill = order),  color = "gray22",
+    alpha = 0.3
+  ) +
+  geom_text(
+    data = order_dt, 
+    aes(y = ymed, x = xmed, label = lab), 
+    vjust = 0.5, hjust = 0.5, 
+    color = "gray22"
+  ) +
+  geom_boxplot(
+    aes(y = sp_id, x = n_patches, group = sp_id, fill = order), 
+    outlier.colour = "gray88", alpha = 0.8, color = "gray33", outliers = F
+  ) +
+  geom_rect(
+    data = total_dt, 
+    aes(xmin = sample_max*1.3, xmax = n_patches_log,
+        ymin = sp_id-0.5, ymax = sp_id+0.5, fill = order), alpha = 0.6
+  ) +
+  geom_vline(
+    xintercept = logs_x, linetype = "dashed", color = "gray44"
+  ) +
+  geom_point(
+    data = total_dt, 
+    aes(x = n_depl_log, y = sp_id), 
+    shape = 21, fill = "gray22", color = "white", size = 2
+  ) +
+  geom_rect(
+    data = lab_box,
+    aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+    fill = "white", color = "gray22"
+  ) +
+  geom_text(
+    data = lab_box,
+    aes(x = xmed, y = ymed, label = lab),
+    hjust = 0.5, vjust = 0.5, color = "gray22", size = 3, fontface = "bold"
+  ) +
+  scale_fill_manual(values = ord_col) +
+  scale_color_manual(values = ord_col) +
+  scale_y_continuous(
+    breaks = total_dt$sp_id, labels = total_dt$species, expand = c(0,0)
+  ) +
+  scale_x_continuous(
+    breaks = c(seq(0, floor(sample_max), 5), logs_x),
+    labels = c(seq(0, floor(sample_max), 5), logs_lab),
+    expand = c(0,0)
+  ) +
+  labs(
+    x = "left: number of patches per track segment\nvs.\nright: total number of patches (bars) and tracks (points)",
+    y = "species",
+    title = "Number of patches per track segment"
+  ) +
+  theme_bw() +
+  theme(
+    legend.position = "none", 
+    plot.title = element_text(face = "bold", vjust = 0.5)
+  )
+
+
+
+ggsave(
+  filename = file.path(graphs_dir, "8_patches.png"),
+  width = 12, height = 15, dpi = 300, bg = "white"
+)
+
+
+
+
+
+# trial -------------------------------------------------------------------
+
+stats_dt[, patch_vs_night := n_patches/n_nights]
+
+
+stats_dt |> 
+  ggplot() + 
+  geom_boxplot(
+    aes(y = sp_id, x = patch_vs_night, group = sp_id, fill = order), 
+    outlier.colour = "gray88", alpha = 0.8, color = "gray33", outliers = F
+  ) +
+  scale_fill_manual(values = ord_col) +
+  scale_color_manual(values = ord_col) +
+  scale_y_continuous(
+    breaks = total_dt$sp_id, labels = total_dt$species, expand = c(0,0)
+  ) +
+  labs(
+    x = "number of patches / number of nights",
+    y = "species",
+    title = "Proportion [patches/nights] per track segment"
+  ) +
+  theme_bw() +
+  theme(
+    legend.position = "none", 
+    plot.title = element_text(face = "bold", vjust = 0.5)
+  )
+
+
+
+ggsave(
+  filename = file.path(graphs_dir, "8_patches_vs_night.png"),
+  width = 12, height = 15, dpi = 300, bg = "white"
+)
+
+
+
+
+
+stats_dt |> 
+  ggplot() + 
+  geom_boxplot(
+    aes(y = sp_id, x = max_revisit_per_patch, group = sp_id, fill = order), 
+    outlier.colour = "gray88", alpha = 0.8, color = "gray33", outliers = F
+  ) +
+  scale_fill_manual(values = ord_col) +
+  scale_color_manual(values = ord_col) +
+  scale_y_continuous(
+    breaks = total_dt$sp_id, labels = total_dt$species, expand = c(0,0)
+  ) +
+  labs(
+    x = "maximum number of revisits per patch and segment",
+    y = "species",
+    title = "Maximum number of revisits to a patch"
+  ) +
+  theme_bw() +
+  theme(
+    legend.position = "none", 
+    plot.title = element_text(face = "bold", vjust = 0.5)
+  )
+
+
+
+ggsave(
+  filename = file.path(graphs_dir, "8_max_revisits.png"),
+  width = 12, height = 15, dpi = 300, bg = "white"
+)
+
+
+
+
+
+
+
+# PLOT: Time to first revisit---------------------------------------------------
+
+pout_dir <- file.path(plots_dir, "1_time_to_first_revisit")
+dir.create(pout_dir, showWarnings = F)
+
+fin_name <- sprintf(
+  "1_sleep_clusters_bursts_%d_window_%d_gap.rds", max_wdw, max_gap)
 files <- list.files(revisit_dirs, pattern = fin_name, full.names = T)
 
 target_sp <- gsub(
   ".*Studies/(.*?)_(.*?)/8_cluster_revisits.*", "\\1_\\2", files)
 files_out <- sprintf(
   "1_%s_longest_burst_first_revisit_%d_window_%d_gap.png", 
-  target_sp, wdw*n_wdw, max_gap)
+  target_sp, max_wdw, max_gap)
 
-sp_to_do <- target_sp[!file.exists(file.path(plots_dir, files_out))]
+sp_to_do <- target_sp[!file.exists(file.path(pout_dir, files_out))]
 nsp <- length(sp_to_do)
 rm(files_out)
 
@@ -158,7 +556,7 @@ if(nsp > 0){
     
     pname <- sprintf(
       "1_%s_longest_burst_first_revisit_%d_window_%d_gap.png", 
-      sp, wdw*n_wdw, max_gap)
+      sp, max_wdw, max_gap)
     
     sp_dir <- file.path(study_dir, sp)
     fin <- file.path(sp_dir, "8_cluster_revisits", fin_name)
@@ -230,7 +628,7 @@ if(nsp > 0){
     
 
     ggsave(
-      filename = file.path(plots_dir, pname),
+      filename = file.path(pout_dir, pname),
       width = 10, height = 5, dpi = 300, bg = "white"
     )
     
@@ -244,11 +642,11 @@ if(nsp > 0){
 rm(fin_name, files, sp_to_do)
 
 
-# 2- Roll window samples --------------------------------------------------
+# 2 - Roll window samples --------------------------------------------------
 
 
 fin_name <- sprintf(
-  "1_sleep_clusters_bursts_%d_window_%d_gap.rds", wdw*n_wdw, max_gap)
+  "1_sleep_clusters_bursts_%d_window_%d_gap.rds", max_wdw, max_gap)
 files <- list.files(revisit_dirs, pattern = fin_name, full.names = T)
 
 files_out <- gsub(".rds", "_roll_window.rds", files)
@@ -273,18 +671,18 @@ if(nf > 0){
     setorder(dcp_dt, file, day_cycle)
     dcp_dt[, burst_day := day_cycle - burst_start + 1, by = .(file, burst)]
     
-    dcp_dt[, sample_id := paste(burst, ceiling(burst_day/(wdw*n_wdw)), sep = "-"), 
+    dcp_dt[, sample_id := paste(burst, ceiling(burst_day/(max_wdw)), sep = "-"), 
            by = .(file, burst)]
     
     dcp_dt[, sample_lngth := max(day_cycle) - min(day_cycle) + 1, 
            by = .(file, sample_id)]
     
-    dcp_dt <- dcp_dt[sample_lngth == wdw*n_wdw]
+    dcp_dt <- dcp_dt[sample_lngth == max_wdw]
     
     if(nrow(dcp_dt) == 0){
       
       fout <- gsub(".rds", "_nodata.rds", fout)
-      fwrite(data.table(sample_size = wdw*n_wdw), fout)
+      fwrite(data.table(sample_size = max_wdw), fout)
       return(NULL)
       
     }
@@ -294,8 +692,10 @@ if(nf > 0){
       , sample_day := day_cycle - sample_start + 1, by = .(file, sample_id)]
     dcp_dt[
       , sleep_cluster_id := fifelse(
-        sleep_cluster == 0, paste0("0-", 1:.N), as.character(sleep_cluster)), 
-      by = .(file)
+        sleep_cluster == 0, 
+        paste(.GRP, sleep_cluster, 1:.N, sep = "-"),
+        paste(.GRP, sleep_cluster, sep = "-")
+      ), by = .(file)
     ]
     
     sample_dt <- rbindlist(lapply(n_wdws, function(n_wdw){
@@ -306,15 +706,14 @@ if(nf > 0){
       week_dt <- week_dt[, .(
         times_visited = .N, 
         perc_visited = .N/(wdw*n_wdw)
-        ), 
-        by = .(
-          file, burst_start, burst_end, burst_length, 
-          sample_start, sample_id, sleep_cluster, sleep_cluster_id)]
+      ), 
+      by = .(
+        file, burst_start, burst_end, burst_length, 
+        sample_start, sample_id, sleep_cluster, sleep_cluster_id)]
       
       week_dt[, time_window := wdw*n_wdw]
       
     }))
-    
     
     fwrite(sample_dt, fout)
     
@@ -323,16 +722,18 @@ if(nf > 0){
   })
 }
 
+
+
 # PLOT: roll window overview ---------------------------------------------------
 
 pname <- sprintf(
-  "8_sleep_clusters_bursts_%d_window_%d_gap.png", wdw*n_wdw, max_gap)
+  "8_sleep_clusters_bursts_%d_window_%d_gap.png", max_wdw, max_gap)
 
 if(!file.exists(file.path(graphs_dir, pname))){
   
   fin_name <- sprintf(
     "1_sleep_clusters_bursts_%d_window_%d_gap_roll_window.rds", 
-    wdw*n_wdw, max_gap)
+    max_wdw, max_gap)
   files <- list.files(revisit_dirs, pattern = fin_name, full.names = T)
   
   sample_dt <- rbindlist(lapply(seq_along(files), function(n){
@@ -454,7 +855,7 @@ if(!file.exists(file.path(graphs_dir, pname))){
       x = "number of samples and deployments per species", 
       y = "species", 
       title = sprintf(
-        "Avialability of %d window samples across species", wdw*n_wdw)
+        "Avialability of %d window samples across species", max_wdw)
     ) +
     theme_bw() +
     theme(legend.position = "none")
@@ -466,16 +867,20 @@ if(!file.exists(file.path(graphs_dir, pname))){
   
 }
 
+# PLOT: patch summary -----------------------------------------------------
 
-# PLOT random samples -----------------------------------------------------
+n_smpl <- 150
 
-n_smpl <- 100
+pal_wdw <- c("28" = "#B39DDB", "21" = "#D9B5CC", "14" = "#FFCCBC")
 
 fin_name <- sprintf(
   "1_sleep_clusters_bursts_%d_window_%d_gap_roll_window.rds", 
-  wdw*n_wdw, max_gap)
+  max_wdw, max_gap)
 
 files <- list.files(revisit_dirs, pattern = fin_name, full.names = T)
+
+pout_dir <- file.path(plots_dir, "2_samples_patch_summary")
+dir.create(pout_dir, showWarnings = F)
 
 
 lapply(seq_along(files), function(n){
@@ -485,18 +890,49 @@ lapply(seq_along(files), function(n){
   
   sample_dt <- fread(fin)
   
-  sample_dt[, n_depl := uniqueN(file), by = file]
-  
   sample_ids <- unique(sample_dt[, .(file, sample_id)])
   
   if(nrow(sample_ids) < n_smpl) {return(NULL)}
   
   set.seed(12345)
   sample_ids <- sample_ids[, .SD[sample(.N, n_smpl)]]
-  
+  n_depl <- uniqueN(sample_ids$file)
+
   sample_dt <- sample_dt[sample_ids, on = .(file, sample_id)]
   
-  uniqueN(sample_ids$file)
+  sample_ids <- sample_ids[, .(n_smpl = uniqueN(sample_id)), by = file]
+  sample_ids <- sample_ids[, .(
+    n_med = as.numeric(median(n_smpl)), 
+    n_up = quantile(n_smpl, 0.25), 
+    n_low = quantile(n_smpl, 0.75))]
+  smpl_per_depl <- sprintf("median [Q1-Q3]: %.1f [%.0f-%.0f]",
+    sample_ids$n_med, sample_ids$n_up, sample_ids$n_low)
+  
+  # making facet titles
+  info_dt <- sample_dt[
+    , .(
+      cls_clustered = uniqueN(sleep_cluster_id[sleep_cluster > 0]),
+      cls_unclustered = sum(sleep_cluster == 0)
+      ), by = .(file, time_window, sample_id)]
+  info_dt <- info_dt[, .(
+    clst_per_file_median = as.numeric(median(cls_clustered)), 
+    unclust_per_file_median = as.numeric(median(cls_unclustered)),
+    n_tlt = sum(cls_clustered), 
+    n_unc = sum(cls_unclustered)
+    ), by = time_window]
+  info_dt[, txt := sprintf(
+    "%d days | %d revisited patches (%d visited only once) | median per sample %.1f (%.1f)", 
+    time_window, n_tlt, n_unc, clst_per_file_median, unclust_per_file_median)]
+  info_dt <- info_dt[, .(time_window, txt)]
+  
+  # plot titles 
+  plt_tlt <- sprintf("%s - %d deployments", sp, n_depl)
+  plt_stlt = sprintf(
+    "%d random samples across deployments | per deployment - %s", 
+    n_smpl, smpl_per_depl) 
+  
+  sample_dt <- merge(sample_dt, info_dt, by = "time_window")
+
   
   setorder(sample_dt, time_window, -perc_visited)
   sample_dt[, plotx := 1:.N, by = time_window]
@@ -506,90 +942,32 @@ lapply(seq_along(files), function(n){
     geom_col(
       aes(x = plotx, y = perc_visited, fill = as.factor(time_window)),
     ) +
-    facet_wrap(~time_window, ncol = 1) +
+    facet_wrap(~txt, ncol = 1) +
     theme_bw() +
     labs(
       x = "sleeping patch", 
-      y = "proportion of days visited\ntimes a patch was visited/time window",
-      title = sprintf("%s - %d individuals", sp, uniqueN(sample_ids$file)),
-      subtitle = sprintf(
-        "%d random samples of windows of %d days across deployments", 
-        n_smpl, wdw*n_wdw), 
-      fill = "window size [days]"
+      y = "frequency of visits\ntimes a patch was visited/time window", 
+      title = plt_tlt,
+      subtitle = plt_stlt
     ) +
+    scale_fill_manual(values = pal_wdw) +
     theme(
-      legend.position = "bottom", 
+      legend.position = "none", 
       axis.text.x = element_blank()
     )
   
-  pname <- sprintf("3_%s_%d_random_samples_%d_days.png", sp, n_smpl, wdw*n_wdw)
+  pname <- sprintf(
+    "2_%s_%d_random_samples_%d_days_bypatch.png", sp, n_smpl, max_wdw)
   
   ggsave(
-    file.path(plots_dir, pname),
+    file.path(pout_dir, pname),
     width = 10, height = 15, dpi = 300, bg = "white"
   )
   
-})
-
-
-
-
-# PLOT: Revisiting times -------------------------------------------------------
-
-max_wdw <- max(n_wdws)*wdw
-
-fin_name <- sprintf(
-  "1_sleep_clusters_bursts_%d_days_rolling_window.rds", max_wdw)
-files <- list.files(cluster_dirs, pattern = fin_name, full.names = T)
-
-#files <- files[!file.exists(files_out)]
-nf <- length(files)
-rm(files_out, fin_name)
-
-
-lapply(seq_along(files), function(n){
+  sample_dt <- sample_dt[sleep_cluster > 0]
   
-  fin <- files[n]
-  sp <- sub(".*Studies/(.*?)_(.*?)/10_cluster_revisits.*", "\\1 \\2", fin)
-  
-  # migration_txt <- paste(
-  #   traits_dt[species == sp, migration], "|",
-  #   traits_dt[species == sp, birdlife_migration])
-  
-  sample_dt <- fread(fin)
-  
-  if(all(sample_dt$sleep_cluster == 0)){return(NULL)}
-  
-  # Find the longest burst per file
-  max_burst <- sample_dt[
-    , .SD[which.max(burst_length)], by = file][
-    , .(file, burst_start, burst_end)]
-  
-  # filter dcp_dt to keep only those bursts
-  sample_ids <- sample_dt[max_burst, on = .(file, burst_start, burst_end)][
-    , .(file, sample_id)]
-  n_individuals <- uniqueN(sample_ids$file)
-  
-  set.seed(12345)
-  sample_ids <- sample_ids[, .SD[sample(.N, 1)], by = file]
-  
-  sample_dt <- sample_dt[sample_ids, on = .(file, sample_id)][sleep_cluster > 0]
-  
-  # if a sleep cluster appears in different bursts, save the longest one only
-  info_dt <- sample_dt[
-    , .(clst_per_file = uniqueN(sleep_cluster)), by = .(file, time_window)]
-  info_dt <- info_dt[, .(
-    clst_per_file_median = as.numeric(median(clst_per_file)), 
-    n_files = uniqueN(file),
-    n_tlt = sum(clst_per_file)), 
-    by = time_window]
-  info_dt[, txt := sprintf(
-  "%d days | %d individuals with median number of patches %.1f [N total = %d]", 
-  time_window, n_files, clst_per_file_median, n_tlt)]
-  
-  # for each time_window and times_visited, count number of unique clusters
   summary_dt <- sample_dt[, .(
-    n_patches = uniqueN(paste0(basename(file), "-", sleep_cluster))
+    n_patches = uniqueN(sleep_cluster_id)
   ), by = .(time_window, times_visited)]
   summary_dt[, p_patches := n_patches/sum(n_patches), by = time_window]
   summary_dt <- merge(
@@ -598,40 +976,39 @@ lapply(seq_along(files), function(n){
     by = "time_window"
   )
   
-  if(nrow(summary_dt) == 0){ return(NULL)}
-  
   summary_dt |> 
     ggplot() + 
     geom_col(
       aes(x = times_visited, y = p_patches, fill = as.factor(time_window)), 
-      width = 1, color = "gray66"
-      ) +
+      width = 1, color = "gray33", linewidth = 0.2
+    ) +
     facet_wrap(~txt, ncol = 1) +
     theme_bw() +
     scale_x_continuous(
       breaks = seq(1, max_wdw, by = 1), limits = c(0, max_wdw+1)
     ) +
     theme(legend.position = "none") +
-    scale_fill_manual(
-      values = c("28" = "#B39DDB", "21" = "#D9B5CC", "14" = "#FFCCBC")
-    ) +
+    scale_fill_manual(values = pal_wdw) +
     labs(
       x = "number of visits to a patch", 
       y = "number of patches / total number of patches", 
-      title = sprintf(
-        "%s - one random sample per individual [N total = %d]", sp, n_individuals)
+      title = plt_tlt,
+      subtitle = plt_stlt, 
+      caption = "locations visited once removed, not included in the patch total"
     )
   
-  pname <- paste0("2_", gsub(" ", "_", sp), "_sliding_window.png")
- 
+  pname <- sprintf(
+    "2_%s_%d_random_samples_%d_days_byday.png", sp, n_smpl, max_wdw)
+  
   ggsave(
-    filename = file.path(plots_dir, pname),
-    width = 10, height = 4, dpi = 300, bg = "white"
+    file.path(pout_dir, pname),
+    width = 10, height = 15, dpi = 300, bg = "white"
   )
   
+  
+  
+  cat("DONE:", n, "|", length(files), "\n")
+  
 })
-
-
-# Revisits 2 --------------------------------------------------------------
 
 
