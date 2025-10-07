@@ -148,6 +148,7 @@ stats_dt <- rbindlist(lapply(seq_along(files), function(n){
   fin <- files[n]
   dcp_dt <- fread(fin)
   
+  # get revisits per patch and per burst
   revisit_per_patch <- dcp_dt[sleep_cluster > 0][
     , .(n_revisits = sum(revisit_day_cycle > 0, na.rm = T)),
     by = .(file, burst, sleep_cluster)][
@@ -158,6 +159,7 @@ stats_dt <- rbindlist(lapply(seq_along(files), function(n){
     ), by = .(file, burst)]
   
   
+  # get total number of nights available
   dcp_track <- dcp_dt[, .(
     n_nights = uniqueN(day_cycle), 
     n_patches = uniqueN(sleep_cluster[sleep_cluster != 0]),
@@ -186,7 +188,10 @@ setcolorder(
 )
 
 fwrite(
-  setnames(copy(stats_dt), old = c("burst", "file"), new = c("segment_id", "track_id")), 
+  setnames(
+    copy(stats_dt), 
+    old = c("burst", "file"), 
+    new = c("segment_id", "track_id")), 
   file.path(data_dir, "8_cluster_revisits_segment_summary.csv")
 )
 

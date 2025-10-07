@@ -134,9 +134,6 @@ lapply(1:nrow(fdt), function(i){
           sl_n_steps == 1, as.numeric(sl_), as.numeric(sl_median_old))] 
       }
       
-      max_dist <- round(max(dt[, get(dist_col)])+100)
-      if(max_dist < 100) max_dist <- 100
-      
       dt_out <- dt[, c(
         species = gsub(".*/Studies/(.*?)_(.*?)/6_distances.*", "\\1 \\2", fin),
         N_steps = .N, 
@@ -148,9 +145,6 @@ lapply(1:nrow(fdt), function(i){
           round(quantile(
             get(dist_col), probs = c(0.05, 0.25, 0.5, 0.75, 0.95)), 2), 
           paste0("sl_", c("05", "25", "50", "75", "95")))), 
-        range_mode_100m = as.character(get_mode(cut(
-          get(dist_col), breaks = c(-1, seq(0, max_dist, 100)), right = T)
-        )), 
         continents = paste(unique(continent), collapse = ", "), 
         sensors = paste(unique(sensor), collapse = ", ")
       )]
