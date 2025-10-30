@@ -6,13 +6,6 @@ source("0_helper_functions.R")
 source("6_distance_PLOT_FUNCTIONS.R")
 source("color_palettes.R")
 
-# PROBLEMS
-# Haematopus ostralegus - avonet says "sedentary", birdlife full migrant
-# Pelecanus occidentalis - avonet says "sedentary", birdlife full migrant, wiki partial
-# Gyps rueppelli - avonet says "sedentary", birdlife full migrant
-# Corvus corone - avonet says "sedentary", birdlife full migrant
-
-
 data_dir <- here::here("Data")
 study_dir <- file.path(data_dir, "Studies")
 graphs_dir <- file.path(data_dir, "Graphs")
@@ -20,18 +13,14 @@ graphs_dir <- file.path(data_dir, "Graphs")
 dist_dirs <- file.path(list.files(study_dir, full.names = T), "6_distances")
 target_sp <- gsub(".*/Studies/(.*?)_(.*?)/6_distances.*", "\\1 \\2", dist_dirs)
 
-birdlife <- fread("Birdlife_migration_status.csv")[
-  , .(species, migration_birdlife)]
-birdlife[, migration_birdlife := tolower(migration_birdlife)]
 traits_dt <- fread(here::here("Published_data", "00_bird_traits.csv"))
 traits_dt[, activity := ifelse(nocturnal == 1, "nocturnal", "diurnal")]
 traits_dt <- unique(traits_dt[
-  , .(species = birdlife_name, migration_avonet = migration_txt, 
+  , .(species = birdlife_name, migration = migration_txt, 
       activity, order, family)])
 traits_dt <- traits_dt[species %in% target_sp]
-traits_dt <- merge(traits_dt, birdlife, by = "species", all.x = T)
 
-rm(target_sp, birdlife)
+rm(target_sp)
 
 # in case we want to check manipulations
 # deployments <- fread(file.path(data_dir, "1_deployments_to_download.csv"))
@@ -96,7 +85,8 @@ lapply(1:nrow(fdt), function(i){
       dt_per_file <- dt[, .(
         n_days = uniqueN(day_cycle_1),
         n_year_days = uniqueN(yd), 
-        sensor = unique(sensor)
+        sensor = unique(sensor), 
+        n_steps = unique(n_steps)
       ), by = file]
       
       # remove duplicated trakcs - deployments with both gps and sigfox
@@ -112,6 +102,8 @@ lapply(1:nrow(fdt), function(i){
       
       cls <- c("n_days", "n_year_days")
       
+      n_steps_tot <- sum(dt_per_file$n_steps)
+      
       # extract stats for tracking times
       dt_per_file <- dt_per_file[, c(
         as.list(setNames(lapply(.SD, median), paste0("median_", cls))),
@@ -119,7 +111,8 @@ lapply(1:nrow(fdt), function(i){
           if(n_deploy_tot == 1) NA else paste(range(x), collapse = " - ") }),
           paste0("range_", cls))),
         N_gps = sum(sensor == "gps"),
-        N_sigfox = sum(sensor == "sigfox")
+        N_sigfox = sum(sensor == "sigfox"), 
+        Shennon_n_steps = -sum(n_steps/n_steps_tot * log10(n_steps/n_steps_tot))
       ), .SDcols = cls]
       
       dt[, yd := day_cycle_to_yd(day_cycle_1)]
@@ -156,8 +149,8 @@ lapply(1:nrow(fdt), function(i){
     # add traits and phylogeny
     species_dt <- merge(species_dt, traits_dt, by = "species", all.x = T)
     
-    cls <- c("species", "family", "order", "migration_avonet", 
-             "migration_birdlife", "activity", "N_deployments")
+    cls <- c(
+      "species", "family", "order", "migration", "activity", "N_deployments")
     
     setcolorder(species_dt, neworder = cls)
     
@@ -179,43 +172,206 @@ rm(fdt)
 
 
 
+# 2 - Stat param overview -----------------------------------------------------
+
+# INPUT
+fin_name <- "4_all_tracks_max_active_steps_nauticalDawn_nauticalDusk_continent.rds"
+
+
+
+species_dt <- rbindlist(lapply(seq_along(files), function(n){
+  
+  fin <- files[n]
+  
+  dt <- fread(fin)
+  
+  # filter tracks that have less than 10 steps
+  dt <- dt[, n_steps := .N, by = file][n_steps >= n_fltr]
+  
+  if(nrow(dt) == 0){ return(NULL) }
+  
+  dt[, yd := day_cycle_to_yd(day_cycle_1)]
+  # extract sensor
+  dt[, sensor := sub(".*dep_(.*?)_sen.*", "\\1", file)][
+    , sensor := fcase(sensor == 653, "gps", sensor == 2299894820, "sigfox")]
+  
+  n_deploy_tot <- dt[, uniqueN(file)]
+  
+  # get track lengths and sensor
+  dt_per_file <- dt[, .(
+    n_days = uniqueN(day_cycle_1),
+    n_year_days = uniqueN(yd), 
+    sensor = unique(sensor), 
+    n_steps = unique(n_steps)
+  ), by = file]
+  
+  # remove duplicated trakcs - deployments with both gps and sigfox
+  dt_per_file[, track_id := sub("_dep_\\d+.*$", "", basename(file))]
+  
+  setorder(dt_per_file, sensor)
+  
+  dt_per_file[, duplicated_track := duplicated(track_id)]
+  dpltrks <- dt_per_file[duplicated_track == T, file]
+  
+  dt_per_file <- dt_per_file[duplicated_track == F]
+  dt <- dt[!file %in% dpltrks]
+  
+  cls <- c("n_days", "n_year_days")
+  
+  n_steps_tot <- sum(dt_per_file$n_steps)
+  
+  # extract stats for tracking times
+  dt_per_file <- dt_per_file[, c(
+    as.list(setNames(lapply(.SD, median), paste0("median_", cls))),
+    as.list(setNames(lapply(.SD, function(x) {
+      if(n_deploy_tot == 1) NA else paste(range(x), collapse = " - ") }),
+      paste0("range_", cls))),
+    N_gps = sum(sensor == "gps"),
+    N_sigfox = sum(sensor == "sigfox"), 
+    Shennon_n_steps = -sum(n_steps/n_steps_tot * log10(n_steps/n_steps_tot))
+  ), .SDcols = cls]
+  
+  dt[, yd := day_cycle_to_yd(day_cycle_1)]
+  # extract sensor
+  dt[, sensor := sub(".*dep_(.*?)_sen.*", "\\1", file)]
+  
+  
+  if(dist_col == "sl_median"){ 
+    setnames(dt, old = "sl_median", new = "sl_median_old")
+    # when there was only one distance available no stats was calculated
+    dt[, sl_median := fifelse(
+      sl_n_steps == 1, as.numeric(sl_), as.numeric(sl_median_old))] 
+  }
+  
+  dt_out <- dt[, c(
+    species = gsub(".*/Studies/(.*?)_(.*?)/6_distances.*", "\\1 \\2", fin),
+    N_steps = .N, 
+    N_days = uniqueN(day_cycle_1),
+    N_year_days = uniqueN(yd),
+    N_deployments = uniqueN(file), 
+    sl_mean = mean(get(dist_col)),
+    as.list(setNames(
+      round(quantile(
+        get(dist_col), probs = c(0.05, 0.25, 0.5, 0.75, 0.95)), 2), 
+      paste0("sl_", c("05", "25", "50", "75", "95")))), 
+    continents = paste(unique(continent), collapse = ", "), 
+    sensors = paste(unique(sensor), collapse = ", ")
+  )]
+  
+  cbind(dt_out, dt_per_file)
+  
+}), fill = T)
+
+
+files <- list.files(data_dir, pattern = "6_overview.*\\.csv", full.names = T)
+
+dt_overview <- fread(
+  list.files(
+    data_dir, 
+    pattern = ".*filter_30_max_active_steps.*continent.csv", 
+    full.names = T)
+)
+n_fltr <- 30
+
+target_sp <- dt_overview[, species]
+
+
+disp_fit_dir <- file.path(data_dir, "Disp_fits")
+dir.create(disp_fit_dir, showWarnings = F)
+
+# Fit dispersal -----------------------------------------------------------
+
+dt_overview <- fread(
+  list.files(
+    data_dir, 
+    pattern = ".*filter_30_max_active_steps.*continent.csv", 
+    full.names = T)
+)
+n_fltr <- 30
+
+target_sp <- dt_overview[, species]
+rm(dt_overview)
+
+dist_dirs <- file.path(study_dir, gsub(" ", "_", target_sp), "6_distances")
+files <- list.files(
+  dist_dirs, ".*max_active.*nauticalDawn.*continent.rds", full.names = T)
+rm(target_sp)
+
+dt_steps <- rbindlist(lapply(seq_along(files), function(i){
+  
+  fin <- files[i]
+  sp <- gsub(".*Studies/(.*)_(.*)/6_distances/.*", "\\1 \\2", fin)
+  
+  dt <- fread(fin)
+  
+  # filter tracks that have less than 10 steps
+  dt <- dt[, n_steps := .N, by = file][n_steps >= n_fltr]
+  
+  # extract sensor
+  dt[, sensor := sub(".*dep_(.*?)_sen.*", "\\1", file)][
+    , sensor := fcase(sensor == 653, "gps", sensor == 2299894820, "sigfox")]
+  
+  # get track lengths and sensor
+  dt_per_file <- dt[, .(sensor = unique(sensor)), by = file]
+  
+  # remove duplicated trakcs - deployments with both gps and sigfox
+  dt_per_file[, track_id := sub("_dep_\\d+.*$", "", basename(file))]
+  
+  setorder(dt_per_file, sensor)
+  
+  dt_per_file[, duplicated_track := duplicated(track_id)]
+  dpltrks <- dt_per_file[duplicated_track == T, file]
+  rm(dt_per_file)
+  
+  dt <- dt[, .(file, sl_, day_cycle_1)]
+  
+  dt[, .(
+    mean_sl = mean(sl_),
+    median_sl = median(sl_),
+    sd_sl = sd(sl_),
+    cv_sl = sd(sl_)/mean(sl_),
+    IQR_sl = IQR(sl_), 
+    skewness_sl = e1071::skewness(sl_), 
+    kurtosis_sl = e1071::kurtosis(sl_), 
+    unimodal = ifelse(diptest::dip.test(sl_)$p.value < 0.05, 0, 1), 
+    mode_kde = {
+      dens <- density(sl_, na.rm=TRUE)
+      dens$x[which.max(dens$y)]
+    },
+    n_steps = .N, 
+    skewness_sl_log = e1071::skewness(log10(sl_)), 
+    kurtosis_sl_log = e1071::kurtosis(log10(sl_)), 
+    unimodal_log = ifelse(diptest::dip.test(sl_)$p.value < 0.05, 0, 1), 
+    mode_kde_log = density(log10(sl_))$x[which.max(dens$y)]
+  )][, species = sp]
+
+}))
+
+
+
+
+
 # PLOT: median sl_ per species -------------------------------------------------
 
 files <- list.files(data_dir, pattern = "6_overview.*\\.csv", full.names = T)
 grupings <- c("migration", "order")
-migration_col <- "migration_birdlife"
 
 # check which already done
 files <- unique(unlist(lapply(grupings, function(o){
   
-  pname <- sprintf(
-    gsub(".csv", "_%s_%s.png", basename(files)), o, migration_col)
+  pname <- sprintf(gsub(".csv", "_%s.png", basename(files)), o)
+  
   return(files[!file.exists(file.path(graphs_dir, "6_distances", pname))])
   
 })))
 
 nf <- length(files)
 
-if(grepl("avonet", migration_col)){
-  
-  # AVONET
-  #mlvl <- c("sedentary", "partial", "migrant")
-  mlbl <- c("sedentary", "partial migrant", "migrant")
-  move_col <- c("#A3DA8D", "#F4A460", "#781D42")
-  names(move_col) <- mlbl
-  
-} 
-
-
-if(grepl("birdlife", migration_col)){
-  
-  # BIRDLIFE
- # mlvl <- c("sedentary", "nomadic", "altitude", "migrant")
-  mlbl <- c("sedentary", "nomadic", "altitudinal migrant", "migrant")
-  move_col <- c("#A3DA8D", "darkgreen", "pink", "#781D42")
-  names(move_col) <- mlbl
-  
-}
+# AVONET migration categories
+#mlvl <- c("sedentary", "partial", "migrant")
+mlbl <- c("sedentary", "partial migrant", "migrant")
+move_col <- c("#A3DA8D", "#F4A460", "#781D42")
+names(move_col) <- mlbl
 
 
 if(nf > 0){
@@ -224,17 +380,16 @@ if(nf > 0){
     y = 5,
     xmin = 1,
     xmax = 10,
-    x_ppt = c(NA, 2, 6, NA,  13),
-    y_txt = c(4, 7, 2, 4, 2),
-    y_arrow = c(NA, 6, 3, NA, 3),
-    x = c(1, 2, 6, 10, 13),
-    ppt = c(NA, "mod", "med", NA, NA),
+    x_ppt = c(NA, 6, NA,  13),
+    y_txt = c(4, 2, 4, 2),
+    y_arrow = c(NA, 3, NA, 3),
+    x = c(1, 6, 10, 13),
+    ppt = c(NA, "med", NA, NA),
     ppt_txt = c(
       "Q1 [25%]", 
-      "mode range \n(upper limit)", 
       "median \nQ2 [50%]", 
       "Q3 [75%]", 
-      "number of\ndeployments"
+      "number of\ntracks"
     )
   )
   
@@ -244,7 +399,7 @@ if(nf > 0){
     geom_segment(
       aes(x = x_ppt, xend = x, y = 5, yend = y_arrow), color = "gray33", 
       arrow = arrow(length = unit(0.1, "cm"), type = "closed"), 
-      linetype = "dashed"
+      linetype = "dashed", position = position_nudge(y = -0.3)
     ) +
     geom_errorbar(
       aes(y = y, xmin = xmin, xmax = xmax),
@@ -256,8 +411,8 @@ if(nf > 0){
     geom_text(
       aes(x = x, y = y_txt, label = ppt_txt), hjust = 0.5, size = 4
     ) +
-    geom_text(
-      aes(x = 13, y = 5, label = "N"), size = 5, color = "gray11"
+    annotate(
+      "text", x = 13, y = 5, label = "N", size = 5, color = "gray11"
     ) +
     scale_y_continuous(expand = c(0.2, 0.2)) + 
     scale_x_continuous(expand = c(0.3, 0.3)) +
@@ -279,13 +434,11 @@ if(nf > 0){
     
     species_dt <- fread(fin)
     
-    species_dt <- species_dt[, migration := get(migration_col)]
-    
     species_dt <- species_dt[
       , .(species, N_steps, N_deployments, order, 
-          sl_50, sl_25, sl_75, range_mode_100m, migration)]
+          sl_50, sl_25, sl_75, migration)]
     
-    # make factors
+    # make factors - it included birdlife migration 
     species_dt[, migration := fcase(
       # migration == "altitudinal migrant", "altitude migrant",
       migration == "partially migratory", "partial migrant",
@@ -295,11 +448,8 @@ if(nf > 0){
     species_dt[
       , migration := factor(migration, levels = mlbl)]
     
-    species_dt[, mode_lim := as.numeric(
-      sub(".*,\\s*([0-9\\.e\\+]+)\\]", "\\1", range_mode_100m))]
     
-    
-    sl_cols <- c("sl_50", "sl_25", "sl_75", "mode_lim")
+    sl_cols <- c("sl_50", "sl_25", "sl_75")
     species_dt[
       , (sl_cols) := lapply(.SD, function(x) x / 1000), .SDcols = sl_cols]
     
@@ -371,13 +521,9 @@ if(nf > 0){
           aes(y = sp_id, xmin = sl_25, xmax = sl_75, color = migration), 
           linewidth = 1.2, alpha = 0.6
         ) +
-        geom_point(
-          aes(y = sp_id, x = mode_lim, color = migration), shape = 23, 
-          alpha = 0.6, size = 2, fill = "white", stroke = 1.2
-        ) +
         geom_text(
           aes(y = sp_id, x = sl_75-pscl[1], label = N_deployments), 
-          vjust = 0.5, hjust = 0.5, color = "gray33", size = 3
+          vjust = 0.5, hjust = 0.5, color = "gray33", size = 2
         ) +
         geom_rect(
           data = move_dt,
@@ -444,8 +590,7 @@ if(nf > 0){
         top = 0.16  # fraction of plot height from bottom (0 to 1)
       )
       
-      pname <- sprintf(
-        gsub(".csv", "_%s_%s.png", basename(fin)), o, migration_col)
+      pname <- sprintf(gsub(".csv", "_%s.png", basename(fin)), o)
       
       ggsave(
         file.path(graphs_dir, "6_distances", pname), 

@@ -639,9 +639,9 @@ if(file.exists(file.path(graph_dir, pname))){
     ymax = c(100, 120, max(depl_count$n_track_log)), 
     ymed = c(50, 110, mean(c(120, max(depl_count$n_track_log)))),
     lab = c(
-      "deployments after filtering [%]", 
+      "tracks after filtering [%]", 
       "order", 
-      "total number\nof deployments\n[log scale]")
+      "total number of tracks\n[log scale]")
   )
   
   ggplot() +
@@ -712,11 +712,10 @@ if(file.exists(file.path(graph_dir, pname))){
       x = "", 
       y = "", 
       fill = "filter", 
-      title = "Loss of daployments with filtering", 
-      subtitle = "filtering criteria = min number of distance measures per deployment"
+      title = "Loss of tracks with filtering - filtering criteria = min number of distance measures per track"
     )
   
-  ggsave(file.path(graph_dir, pname), height = 24, width = 18)
+  ggsave(file.path(graph_dir, pname), height = 23, width = 15)
   
   
 }
@@ -833,9 +832,9 @@ if(!file.exists(file.path(graph_dir, pname))){
       perc_space+order_space+max(log10(depl_count$n_tracks))*wdth/2
     ),
     lab = c(
-      "deployments GPS vs. SigFox [%]", 
+      "tracks with GPS vs. SigFox [%]", 
       "order", 
-      "total number\nof deployments\n[log scale]")
+      "total number of tracks\n[log scale]")
   )
   
   ggplot() +
@@ -908,10 +907,10 @@ if(!file.exists(file.path(graph_dir, pname))){
       x = "", 
       y = "", 
       fill = "sensor", 
-      title = "Deployments with GPS vs. SigFox"
+      title = "Tracks with GPS vs. SigFox"
     )
   
-  ggsave(file.path(graph_dir, pname), height = 26, width = 15)
+  ggsave(file.path(graph_dir, pname), height = 23, width = 13)
   
   
 }
@@ -1036,9 +1035,9 @@ if(!file.exists(file.path(graph_dir, pname))){
       perc_space+order_space+max(log10(depl_count$n_tracks))*wdth/2
     ),
     lab = c(
-      "deployments relocation vs. none [%]", 
+      "track with relocation vs. no manipulation [%]", 
       "order", 
-      "total number\nof deployments\n[log scale]")
+      "total number of tracks\n[log scale]")
   )
   
   ggplot() +
@@ -1111,10 +1110,10 @@ if(!file.exists(file.path(graph_dir, pname))){
       x = "", 
       y = "", 
       fill = "manipulation", 
-      title = "Deployments with relocation vs. none"
+      title = "Tracks with relocation vs. no manipulation"
     )
   
-  ggsave(file.path(graph_dir, pname), height = 26, width = 15)
+  ggsave(file.path(graph_dir, pname), height = 23, width = 15)
   
   
 }

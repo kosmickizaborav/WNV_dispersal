@@ -68,7 +68,7 @@ plot_distances <- function(
     days_space = 366,
     order_space = 90,
     wdth = 40,
-    dist_type = "Median distance between sleep positions"
+    dist_type = "Median distance between roost positions"
     ){
   
   dist_dirs <- file.path(list.files(study_dir, full.names = T), "6_distances")
@@ -167,7 +167,7 @@ plot_distances <- function(
     lab = c(
       sprintf("%s per calendar day and species", dist_type),  
       "order", 
-      "number of deployments\n[log scale]\ndotted line = in Europe")
+      "number of tracks\n[log scale]\ndotted line = in Europe")
   )[, xmed := (xmin+xmax)/2]
   
   # move_dt <- sp_order[, .(
@@ -288,11 +288,20 @@ f_types <- c(
 lapply(f_types, function(ftp){
   
   if(grepl("sleep", ftp)){ 
-    dstt <- "distance between sleep positions" 
+    dstt <- "distance between roost positions" 
     } else {
     dstt <- ifelse(
       grepl("max", ftp), "daily distance", "distance to median daily position")
-  }
+    }
+  
+  plot_distances(
+    file_type = ftp, sum_fun = min, dist_type = paste("Min", dstt))
+  
+  pname <- sprintf(
+    "6_min_%s_nauticalDawn_nauticalDusk.png", gsub(" ", "_", dstt))
+  
+  ggsave(
+    file.path(graphs_dir, pname),  width = 25, height = 30, units = "cm")
   
   plot_distances(
     file_type = ftp, sum_fun = median, dist_type = paste("Median", dstt))

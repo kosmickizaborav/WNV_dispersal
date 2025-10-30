@@ -184,7 +184,7 @@ get_dcp_dist <- function(
   )
   setorder(dcp_summary, t_min)
   
-  dcp_summary[, day_period_distance_available := T]
+  dcp_summary[, day_period_distance_available := n_locs > 1]
 
   return(dcp_summary)
   

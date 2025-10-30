@@ -288,45 +288,78 @@ track_problems <- merge(track_problems, excluded, by = "file", all.x = T)
 track_problems[, excluded := fifelse(is.na(excluded), F, excluded)]
 
 track_problems[
-  (track_problem %in% c("", NA) & saved == F), track_problem := "<= 3 positions"]
+  (track_problem %in% c("", NA) & saved == F), track_problem := "5. insufficient data"]
 track_problems[(track_problem %in% c("", NA) & excluded == T), 
   track_problem := "duplicated deployments"]
+
+
+coord_probs <- c("weird coordinates", "weird date", "missing coordinates") 
+
+track_problems[, track_problem := fifelse(
+  track_problem %in% coord_probs, 
+  "4. missing coordinates or timestamps", 
+  track_problem)]
+
+track_problems <- track_problems[
+  , n_locs := sum(n_locs), by = .(file, track_problem)]
+
 track_problems[, all_locs := sum(n_locs), by = file]
-track_problems[, prop_locs := round(n_locs / all_locs*100, 1)]
+track_problems[, prop_locs := n_locs / all_locs * 100]
 
 
 problem_sum <- track_problems[ , .(
   n_species = uniqueN(species),
   n_tracks = uniqueN(file),
-  range_locs = paste(
-    quantile(n_locs, c(0.25, 0.75), na.rm = T), collapse = "-"),
-  median_locs = as.numeric(median(n_locs, na.rm = T)),
   range_perc = paste(
-    quantile(prop_locs, c(0.25, 0.75), na.rm = T), collapse = "-"),
+    round(quantile(prop_locs, c(0.25, 0.75), na.rm = T), 2), collapse = "-"),
   median_perc = as.numeric(median(prop_locs, na.rm = T))
 ), by = .(track_problem)]
 
-problem_sum[, ":=" (
-  n_locs = paste0(median_locs, " [", range_locs, "]"), 
-  perc_locs = paste0(median_perc, " [", range_perc, "]")
-)]
+problem_sum[
+  ,  perc_locs := paste0(round(median_perc, 2), " [", range_perc, "]")]
+
+problem_sum <- rbindlist(list(
+  problem_sum, 
+  data.table(
+    track_problem = "1. outside deployment ON or OFF times", 
+    n_species = 0, 
+    n_tracks = 0
+  )), 
+  fill = T)
 
 problem_sum[, track_problem := fcase(
-  track_problem == "", "cleaned and saved deployments",
-  track_problem == "duplicated timestamp (rounded to min)", "duplicated timestamp", 
-  track_problem == "hdop or vdop greater than 5", "high DOP",
-  track_problem == "<= 3 positions", "insufficient data",
-  track_problem == "weird date", "timestamp error", 
-  track_problem == "weird coordinates", "coordinates error", 
+  track_problem == "", "cleaned and saved tracks",
+  track_problem == "duplicated timestamp (rounded to min)", "3. duplicated timestamp (rounded to minute)", 
+  track_problem == "hdop or vdop greater than 5", "2. high HDOP or VDOP",
+  track_problem == "duplicated deployments", "duplicated tracks",
   default = track_problem
 )]
 
-problem_sum <- problem_sum[, .(
-  track_problem, n_species, n_tracks, n_locs, perc_locs)]
-problem_sum[, depl := grepl("deployment", track_problem)]
+problem_sum <- problem_sum[!grepl("E4Warning", track_problem)]
+problem_sum[
+  , perc_locs := fifelse(
+    grepl("insufficient|duplicated tracks", track_problem), NA, perc_locs)]
 
-setorder(problem_sum, -depl, -n_tracks)
+problem_sum[, step_type := fcase(
+  grepl("[1-9]", track_problem), "filter out", 
+  grepl("duplicated", track_problem), "remove",
+  grepl("cleaned", track_problem), "output")]
 
-problem_sum[, depl := NULL]
+
+problem_sum[, track_problem := factor(track_problem, levels = c(
+  "1. outside deployment ON or OFF times",
+  "2. high HDOP or VDOP",
+  "3. duplicated timestamp (rounded to minute)",
+  "4. missing coordinates or timestamps",
+  "5. insufficient data",
+  "duplicated tracks", 
+  "cleaned and saved tracks"
+))]
+
+setorder(problem_sum, track_problem)
+
+problem_sum <- problem_sum[, .(step_type, track_problem, n_species, n_tracks, perc_locs)]
+
 
 fwrite(problem_sum, file.path(data_dir, "2_report_track_problems_summary.csv"))
+

@@ -418,7 +418,7 @@ labs_dt <- data.table(
   ymin = max(sl_dt$sp_id) + 0.5,
   xmin = c(min_sp, max_sp, max_sp + 10),
   xmax = c(max_sp, max_sp + 10, max(sq_dt$xmax)), 
-  lab = c("speed limit [m/s]", "order", "speed quantiles\nbelow the limit [%]")
+  lab = c("theoretical speed limit [m/s]", "order", "speed quantiles\nbelow the limit [%]")
 )
 
 sl_dt |> 
@@ -486,7 +486,7 @@ sl_dt |>
   ) +
   labs(
     y = "species", 
-    x = "speed limits vs. speed distribution"
+    x = "speed limits [m/s] vs. speed distribution [%]"
   ) 
 
 ggsave(
