@@ -54,6 +54,7 @@ library(patchwork)
 source("6_distance_FUNCTIONS.R")
 source("6_distance_PLOT_FUNCTIONS.R")
 source("0_helper_functions.R")
+source("color_palettes.R")
 
 # ALL OUTPUT DIRECTORIES
 data_dir <- here::here("Data")
@@ -628,8 +629,204 @@ invisible(lapply(seq_along(files), function(i){
 
 
 
+# 7 - Check speed distribution --------------------------------------------
 
+fout <- "6_maximum_sl_speed_summary_per_species.csv"
 
+if(!file.exists(file.path(data_dir, fout))){
+  
+  
+  speed_dir <- file.path(graph_dir, "6_distances", "Max_sl_speed")
+  dir.create(speed_dir, showWarnings = F)
+  
+  speed_limits_dt <- fread(file.path(data_dir, "3_speed_limits.csv"))
+  
+  files <- list.files(
+    dist_dirs, pattern = "4_.*_max_.*nauticalDusk_continent.rds", full.names = T)
+  
+  speeds_sp <- rbindlist(lapply(seq_along(files), function(i){
+    
+    fin <- files[i]
+    sp <- sub(".*/Studies/(.*)_(.*)/6_distances/.*", "\\1 \\2", fin)
+    
+    dt <- fread(fin)[, .(file, t1_, t2_, sl_)]
+    dt[, delta_t := as.numeric(difftime(t2_, t1_, units = "secs"))]
+    
+    dt[, speed := sl_/delta_t]
+    
+    speed_limit_sp <- speed_limits_dt[birdlife_name == sp, speed_limit]
+    
+    dt[, above_spl := ifelse(speed > speed_limit_sp, "yes", "no")]
+    
+    dt |> 
+      ggplot() + 
+      geom_histogram(aes(x = speed, fill = above_spl), bins = 100) + 
+      theme_bw() + 
+      scale_fill_manual(values = c("no" = "#219ebc", "yes" = "#fb8500")) +
+      labs(
+        title = paste(sp, "- speed distribution"),
+        subtitle = "maximum daily distances", 
+        x = "speed [m/s]",
+        y = "number of steps",
+        fill = paste0("above speed limit [", speed_limit_sp, " m/s]")
+      ) +
+      theme(
+        legend.position = "top"
+      )
+    
+    pname <- sprintf("%s_max_active_sl_speed.png", gsub(" ", "_", sp))
+    
+    ggsave(file.path(speed_dir, pname), width = 20, height = 15, units = "cm")
+    
+    dt[, .(
+      min_speed = min(speed, na.rm = T),
+      max_speed = max(speed, na.rm = T),
+      mean_speed = mean(speed, na.rm = T),
+      median_speed = median(speed, na.rm = T)
+    )][, birdlife_name := sp]
+    
+  }))
+  
+  speeds_sp <- merge(speeds_sp, speed_limits_dt, by = "birdlife_name")
+  
+  fwrite(speeds_sp, file.path(data_dir, fout))
+  
+}
+
+speeds_sp <- fread(file.path(data_dir, fout))
+
+legend_dt <- data.table(
+  y = 5,
+  xmin = 1,
+  xmax = 10,
+  x_ppt = c(NA, 6, NA,  13),
+  y_txt = c(4, 2, 4, 2),
+  y_arrow = c(NA, 3, NA, 3),
+  x = c(1, 6, 10, 13),
+  ppt = c(NA, "med", NA, "lim"),
+  ppt_txt = c(
+    "min", 
+    "mean",
+    "max", 
+    "seed\nlimit"
+  )
+)
+
+# Legend plot: points and text
+legend <- legend_dt |> 
+  ggplot() +
+  geom_segment(
+    aes(x = x_ppt, xend = x, y = 5, yend = y_arrow), color = "gray33", 
+    arrow = arrow(length = unit(0.1, "cm"), type = "closed"), 
+    linetype = "dashed", position = position_nudge(y = -0.3)
+  ) +
+  geom_errorbar(
+    aes(y = y, xmin = xmin, xmax = xmax),
+    linewidth = 1.2, color = "gray33", alpha = 0.6
+  ) +
+  geom_point(
+    aes(x = x_ppt, y = y, shape = ppt), size = 8, fill = "white"
+  ) + 
+  geom_text(
+    aes(x = x, y = y_txt, label = ppt_txt), hjust = 0.5, size = 4
+  ) +
+  scale_y_continuous(expand = c(0.2, 0.2)) + 
+  scale_x_continuous(expand = c(0.3, 0.3)) +
+  scale_shape_manual(values = c("lim" = 16, "med" = 18), na.value = NA) +
+  theme_void() + 
+  labs(title = "Legend") +
+  theme(
+    legend.position = "none",
+    plot.background = element_rect(
+      fill = "white", color = "gray22", linewidth = 1.2), 
+    plot.title = element_text(
+      hjust = 0.5, vjust = 0, size = rel(1), face = "bold")
+  )
+
+# set order of 
+speeds_sp[, sl_order := max(speed_limit), by = order]
+
+setorder(speeds_sp, sl_order, order, median_speed)
+
+speeds_sp[, sp_id := .I]
+
+order_dt <- speeds_sp[, .(
+  ymax = max(sp_id), 
+  ymin = min(sp_id), 
+  ymed = as.numeric(median(sp_id)), 
+  count = max(sp_id) - min(sp_id) + 1), 
+  by = order]
+order_dt[, lab := ifelse(count > 2, order, "")]
+
+max75 <- max(speeds_sp$speed_limit)+1
+
+pscl <- c(-max75*0.02, -max75*0.08, -max75*0.33)
+
+speeds_sp |> 
+  ggplot() +
+  geom_errorbar(
+    aes(y = sp_id, xmin = min_speed, xmax = max_speed, color = order), 
+    linewidth = 1.2, alpha = 0.6
+  ) +
+  geom_point(
+    aes(y = sp_id, x = mean_speed, color = order), size = 3, shape = 18,
+    alpha = 0.6
+  ) +
+  geom_point(
+    aes(y = sp_id, x = speed_limit, color = order), size = 3, shape = 16,
+    alpha = 0.6
+  ) +
+  geom_rect(
+    data = order_dt,
+    aes(xmin = pscl[3], xmax = pscl[2], ymin = ymin - 0.5, ymax = ymax + 0.5, 
+        fill = order),  color = "gray33",
+    alpha = 0.4
+  ) +
+  geom_text(
+    data = order_dt, 
+    aes(y = ymed, x = pscl[2]+(pscl[3]-pscl[2])/2, label = lab), 
+    vjust = 0.5, hjust = 0.5, 
+    color = "gray33"
+  ) +
+  scale_y_continuous(
+    breaks = speeds_sp$sp_id, 
+    labels = speeds_sp$birdlife_name, 
+    expand = c(0, 0)
+  ) +
+  scale_x_continuous(
+    expand = c(0, 0), 
+    limits = c(pscl[3], max75+10), 
+    breaks = c(
+      seq(0, 100, 10), if(max75 > 100) seq(100, max75+10, 20)), 
+    guide = guide_axis(check.overlap = T)
+  ) +
+  theme_bw() +
+  scale_fill_manual(values = ord_col) +
+  scale_color_manual(values = ord_col) +
+  labs(
+    x = "speed [m/s]", 
+    title = "Speed distribution obtained from daily distances vs. speed limit",
+  ) +
+  theme(
+    axis.title.y = element_blank(), 
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_text(size = rel(0.8)),
+    legend.position = "none"
+  ) + 
+  inset_element(
+    legend,
+    left = 0.70,   # fraction of plot width from left (0 to 1)
+    bottom = 0.01, # fraction of plot height from bottom (0 to 1)
+    right = 0.99,  # fraction of plot width from left (0 to 1)
+    top = 0.16  # fraction of plot height from bottom (0 to 1)
+  )
+
+pname <- "6_speed_distribution_thresholds.png"
+
+ggsave(
+  file.path(graph_dir, "6_distances", pname), 
+  width = 12, height = 16, dpi = 300
+)
 
 
 # Plot data availability for report---------------------------------------------
@@ -647,9 +844,6 @@ if(!file.exists(fout)){
   
   
   month_dt <- get_month_limits()
-  
-  
-  # deployments counts -----------------------------------------------------------
   
   days_space <- 366
   order_space <- 100

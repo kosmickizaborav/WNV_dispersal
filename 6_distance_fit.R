@@ -4,6 +4,7 @@ library(ggplot2)
 library(patchwork)
 library(dispfit)
 library(purrr)
+source("6_distance_fit_FUNCTIONS.R")
 
 data_dir <- here::here("Data")
 study_dir <- file.path(data_dir, "Studies")
@@ -26,18 +27,21 @@ n_fltr <- 30
 target_sp <- dt_overview[, species]
 
 
-disp_fit_dir <- file.path(data_dir, "Disp_fits")
-dir.create(disp_fit_dir, showWarnings = F)
+fit_dir <- file.path(data_dir, "6_distance_fit")
+dir.create(fit_dir, showWarnings = F)
 
-# Fit dispersal -----------------------------------------------------------
+# 1 - Fit dispersal -----------------------------------------------------------
+
+median_dir <- file.path(fit_dir, "Sl_median")
+dir.create(median_dir, showWarnings = F)
 
 fin_name <- "4_all_tracks_max_active_steps_nauticalDawn_nauticalDusk_continent.rds"
 
 dist_dirs <- file.path(study_dir, gsub(" ", "_", target_sp), "6_distances")
 files <- file.path(dist_dirs, fin_name)
-
-files <- files[!file.exists(
-  file.path(disp_fit_dir, paste0(gsub(" ", "_", target_sp), ".rds")))]
+files_out <- file.path(
+  median_dir, paste0(gsub(" ", "_", target_sp), "_sl_median_fit.rds"))
+files <- files[!file.exists(files_out)]
 
 lfl <- length(files)
 
@@ -53,7 +57,7 @@ dist_funs <- c(
   "weibull",
   "gamma"
 )
-# 
+
 # # quantiles for cuttiong off of step lengths vector
 # quantiles <- c(0.95, 0.99, 1)
 
@@ -76,6 +80,11 @@ if(lfl > 0){
     
     if(nrow(dt) == 0){ return(NULL) }
     
+    setnames(dt, old = "sl_median", new = "sl_median_old")
+    # when there was only one distance available no stats was calculated
+    dt[, sl_median := fifelse(
+      sl_n_steps == 1, as.numeric(sl_), as.numeric(sl_median_old))] 
+    
     # extract sensor
     dt[, sensor := sub(".*dep_(.*?)_sen.*", "\\1", file)][
       , sensor := fcase(sensor == 653, "gps", sensor == 2299894820, "sigfox")]
@@ -92,15 +101,15 @@ if(lfl > 0){
     dpltrks <- dt_per_file[duplicated_track == T, file]
     rm(dt_per_file)
     
-    dt <- dt[!file %in% dpltrks][sl_ > 0]
+    dt <- dt[!file %in% dpltrks][sl_median > 0]
     
     # run safely dispersal kernel function for each distribution separately
     # the output is a list with dist_funs as names
     kernels <- dist_funs |> 
-      map(~safe_dispersal_kernel(dt$sl_, distribution = .x)) |> 
+      map(~safe_dispersal_kernel(dt$sl_median, distribution = .x)) |> 
       set_names(dist_funs) 
     
-    saveRDS(kernels, file.path(disp_fit_dir, paste0(sp, ".rds")))
+    saveRDS(kernels, file.path(median_dir, paste0(sp, "_sl_median_fit.rds")))
     
     
   })
@@ -212,11 +221,11 @@ if(lfl > 0){
 
 # 3 - All fits overview---------------------------------------------------------
 
-fout <- file.path(data_dir, "6_distance_fit_overview.csv")
+fout <- "6_distance_fit_overview_sl_median.csv"
 
-file_fits <- list.files(disp_fit_dir, full.names = T)
+file_fits <- list.files(median_dir, full.names = T)
 
-if(!file.exists(fout)){
+if(!file.exists(file.path(data_dir, fout))){
   
   # extract values from each fit
   fits_overview <- rbindlist(lapply(seq_along(file_fits), function(i){
@@ -270,7 +279,7 @@ if(!file.exists(fout)){
   
   setorder(fits_overview, species, delta_AIC)
   
-  fwrite(fits_overview, file.path(data_dir, "6_distance_fit_overview.csv"))
+  fwrite(fits_overview, file.path(data_dir, fout))
   
 }
 
@@ -280,99 +289,290 @@ if(!file.exists(fout)){
 
 # PLOT: fits ---------------------------------------------------------------
 
+fin_name <- "4_all_tracks_max_active_steps_nauticalDawn_nauticalDusk_continent.rds"
 
-disp_plot <- file.path(disp_fit_dir, "Plots")
+disp_plot <- file.path(fit_dir, "Plots_sl_median")
 dir.create(disp_plot, showWarnings = F)
 
 
-file_fits <- list.files(disp_fit_dir, pattern = ".rds", full.names = T)
+file_fits <- list.files(median_dir, pattern = ".rds", full.names = T)
 files_out <- gsub(
-  ".rds", ".png", gsub("Disp_fits", "Disp_fits/Plots", file_fits))
+  "_sl_median_fit.rds", ".png", 
+  gsub("6_distance_fit/Sl_median", "6_distance_fit/Plots_sl_median", file_fits))
 
 file_fits <- file_fits[!file.exists(files_out)]
 
 lf <- length(file_fits)
 
-# extract values from each fit
-lapply(seq_along(file_fits), function(i){
+if(lf > 0){
   
-  fin <- file_fits[i]
-  sp <- gsub(".rds", "", basename(fin))
   
-  dt <- fread(
-    file.path(grep(sp, dist_dirs, value = T), fin_name))[, .(sl_, file)]
-  
-  kernels <- readRDS(fin)
-  
-  kernels <- lapply(kernels, function(krn){krn$result})
-  
-  pred_dt <- rbindlist(lapply(names(kernels), function(nkrn){
+  # extract values from each fit
+  lapply(seq_along(file_fits), function(i){
     
-    krn <- kernels[[nkrn]]
+    fin <- file_fits[i]
+    sp <- gsub("_sl_median_fit.rds", "", basename(fin))
     
-    if(!is.null(krn)){
-      pred_out <- as.data.table(predict(krn)[[1]])
-      names(pred_out)[2] <- "density"
-      pred_out[, ':=' (
-        fitted_function = nkrn,
-        AIC = krn$values$AIC
-      )]
-    } else{
-      return(NULL)
-    }
+    print(sp)
     
-  }))
-  
-  setorder(pred_dt, AIC)
-  
-  pred_dt[, fitted_function := factor(
-    fitted_function, 
-    levels = unique(pred_dt$fitted_function)
+    dt <- fread(file.path(grep(sp, dist_dirs, value = T), fin_name))[
+      , .(sl_median, file)]
+    
+    kernels <- readRDS(fin)
+    
+    kernels <- lapply(kernels, function(krn){krn$result})
+    
+    pred_dt <- rbindlist(lapply(names(kernels), function(nkrn){
+      
+      krn <- kernels[[nkrn]]
+      
+      if(!is.null(krn)){
+        pred_out <- as.data.table(predict(krn)[[1]])
+        names(pred_out)[2] <- "density"
+        pred_out[, ':=' (
+          fitted_function = nkrn,
+          AIC = krn$values$AIC
+        )]
+      } else{
+        return(NULL)
+      }
+      
+    }))
+    
+    setorder(pred_dt, AIC)
+    
+    pred_dt[, fitted_function := factor(
+      fitted_function, 
+      levels = unique(pred_dt$fitted_function)
     )]
-  
-  pred_dt[, fit_names := paste(fitted_function, "\nAIC:", round(AIC))][
-    , fit_names := factor(fit_names, levels = unique(pred_dt$fit_names))  ]
-  
-  ggplot() +
-    # Histogram of observed data (density)
-    geom_histogram(
-      data = dt, 
-      aes(x = sl_, y = ..density..), 
-      bins = 100, fill = "grey80", color = "grey40", alpha = 0.6
-    ) +
-    geom_ribbon(
-      data = pred_dt, 
-      aes(x = distance, ymin = lwr, ymax = upr, fill = fitted_function), 
-      alpha = 0.6, inherit.aes = FALSE
-    ) +
-    # Overlay all fitted curves
-    geom_line(
-      data = pred_dt, 
-      aes(x = distance, y = density, color = fitted_function), 
-      linewidth = 1
-    ) +
-    labs(
-      x = "Daily distance [m]", 
-      y = "Density", 
-      title = sprintf("%s - fitted runctions vs. data", gsub("_", " ", sp)), 
-      subtitle = "ordered by AIC value"
-    ) +
-    theme_minimal() +
-    facet_wrap(~fit_names, scales = "free") +
-    scale_color_brewer(palette = "Dark2") +
-    scale_fill_brewer(palette = "Dark2") +
-    theme(legend.position = "none")
-  
-  ggsave(
-    filename = file.path(disp_plot, paste0(sp, ".png")),
-    width = 10, height = 8, units = "in"
-  )
-  
-  return(invisible(NULL))
-  
-  cat(i, " | ", lf)
+    
+    pred_dt[, fit_names := paste(fitted_function, "\nAIC:", round(AIC))][
+      , fit_names := factor(fit_names, levels = unique(pred_dt$fit_names))  ]
+    
+    ggplot() +
+      # Histogram of observed data (density)
+      geom_histogram(
+        data = dt, 
+        aes(x = sl_median, y = after_stat(density)), 
+        bins = 100, fill = "grey80", color = "grey40", alpha = 0.6
+      ) +
+      geom_ribbon(
+        data = pred_dt, 
+        aes(x = distance, ymin = lwr, ymax = upr, fill = fitted_function), 
+        alpha = 0.6, inherit.aes = FALSE
+      ) +
+      # Overlay all fitted curves
+      geom_line(
+        data = pred_dt, 
+        aes(x = distance, y = density, color = fitted_function), 
+        linewidth = 1
+      ) +
+      labs(
+        x = "Daily distance [m]", 
+        y = "Density", 
+        title = sprintf("%s - fitted runctions vs. data", gsub("_", " ", sp)), 
+        subtitle = "ordered by AIC value"
+      ) +
+      theme_minimal() +
+      facet_wrap(~fit_names, scales = "free") +
+      scale_color_brewer(palette = "Dark2") +
+      scale_fill_brewer(palette = "Dark2") +
+      theme(legend.position = "none")
+    
+    ggsave(
+      filename = file.path(disp_plot, paste0(sp, ".png")),
+      width = 10, height = 8, units = "in"
+    )
+    
+    cat("\n", i, " | ", lf)
+    
 
+    
   })
+  
+}
+
+
+
+
+# CDF Fede plots ---------------------------------------------------------------
+
+fin_name <- "4_all_tracks_max_active_steps_nauticalDawn_nauticalDusk_continent.rds"
+
+fits_dt <- fread(file.path(data_dir, "6_distance_fit_overview_sl_median.csv"))
+#fits_dt <- fits_dt[error_occurred == F][delta_AIC < 2]
+
+file_fits <- list.files(file.path(fit_dir, "Sl_median"), full.names = T)
+
+lf <- length(file_fits)
+
+fin <- file_fits[1]
+sp <- gsub("_sl_median_fit.rds", "", basename(fin))
+
+
+# get only fits without errors
+f <- lapply(readRDS(fin), function(x){
+  
+  if(is.null(x$result)) { return(NULL)}
+  x$result
+  
+  })
+
+#SELECTING MODEL: criteria (WE SHOULD CHECK dAIC below 2)??
+# Find which models have been fitted and take out exp, rayleigh, and wald (very unfrequent with dmax)
+subset_fitmodels <- fits_dt[
+  species == gsub(".rds", "", basename(fin)), fitted_function]
+subset_fitmodels <- setdiff(subset_fitmodels,c("exponential","rayleigh","wald"))
+models_to_use <- intersect(names(f), subset_fitmodels)
+
+
+r_dt <- rbindlist(lapply(names(f), function(mname){
+  
+  krnl <- f[[mname]]
+  
+  data <- krnl$data
+  
+  a <- krnl[["distribution.parameters"]][["Parameter 1"]]
+  a_low <- krnl[["distribution.parameters"]][["Parameter 1 lower CI"]]
+  a_up <- krnl[["distribution.parameters"]][["Parameter 1 upper CI"]]
+  
+  b <- krnl[["distribution.parameters"]][["Parameter 2"]]
+  b_low <- krnl[["distribution.parameters"]][["Parameter 2 lower CI"]]
+  b_up <- krnl[["distribution.parameters"]][["Parameter 2 upper CI"]]
+  
+  
+  data.table(
+    cdf = cdf_function_fede(mname)(
+      pdf_fun = pdf_function_fede(mname), r_vals = data, a = a, b = b),
+    cdf_lower = cdf_function_fede(mname)(
+      pdf_fun = pdf_function_fede(mname), r_vals = data, a = a_low, b = b_low),
+    cdf_upper = cdf_function_fede(mname)(
+      pdf_fun = pdf_function_fede(mname), r_vals = data, a = a_up, b = b_up), 
+    data = data
+  )[, fitted_function := mname]
+  
+  
+}))
+
+# --- 2 Prepare colors dynamically ---
+n_models <- length(models_to_use)
+colors <- brewer.pal(min(8, n_models), "Set1")  # distinct colors
+names(colors) <- models_to_use
+
+# --- 3 Compute RRMSE for each model ---
+gofRRMSE <- function(x, y_model) {
+  y_empirical <- log10(sapply(x, function(xk) length(which(10^x >= 10^xk)) / length(x)))
+  sqrt(mean((y_empirical - y_model)^2)) / (max(y_empirical) - min(y_empirical))
+}
+
+rrmse_results <- sapply(models_to_use, function(mod) {
+  cdf_vals <- cdf_table[[paste0(mod, "_cdf")]]
+  y_model <- log10(1 - cdf_vals)
+  gofRRMSE(xx, y_model)
+})
+
+cdf_table <- r_dt[fitted_function == fitted_function[1]]
+
+# --- 1️ Prepare exceedance probability ---
+x <- sort(cdf_table$data)
+N <- length(x)
+Pexc <- sapply(x, function(xk) length(which(x >= xk)) / N)
+xx <- log10(x)
+yy <- log10(Pexc)
+
+
+setorder(r_dt, fitted_function, data)
+# Compute exceedance probability and its log10
+fits_dt[, Pexc := rev(seq_len(.N)) / .N, by = fitted_function]     
+fit_dt[, xx := log10(sl_median), by = fitted_function]
+fits_dt[, yy := log10(Pexc), by = fitted_function]
+
+# --- 3 Compute RRMSE for each model ---
+gofRRMSE <- function(x, y_model) {
+  y_empirical <- log10(sapply(x, function(xk) length(which(10^x >= 10^xk)) / length(x)))
+  sqrt(mean((y_empirical - y_model)^2)) / (max(y_empirical) - min(y_empirical))
+}
+
+
+
+rrmse_results <- sapply(models_to_use, function(mod) {
+  cdf_vals <- cdf_table[[paste0(mod, "_cdf")]]
+  y_model <- log10(1 - cdf_vals)
+  gofRRMSE(xx, y_model)
+})
+
+
+
+ggplot(r_dt) +
+  geom_line(
+    aes(x = data, y = cdf, color = fitted_function), size = 1
+  ) +
+  geom_ribbon(
+    aes(x = data, ymin = cdf_lower, ymax = cdf_upper, fill = fitted_function), 
+    alpha = 0.3
+  ) 
+
+data <- sort(f$lognormal$result$data)
+cdf_table <- data.frame(r = data, data = data)
+# --- Step 4: Loop over models_to_use and compute CDFs dynamically ---
+for(mod in models_to_use) {
+  pdf_fun <- pdf_list[[mod]]
+  cdf_fun <- cdf_func_list[[mod]]
+  a <- params[[mod]]$a
+  b <- params[[mod]]$b
+  cdf_table[[paste0(mod, "_cdf")]] <- cdf_fun(pdf_fun, data, a = a, b = b)
+}
+
+
+
+# PLOTING DYNAMICALLY subset models
+
+library(RColorBrewer)
+
+# --- 1️ Prepare exceedance probability ---
+# 
+x <- sort(dt$sl_median)
+N <- length(x)
+Pexc <- sapply(x, function(xk) length(which(x >= xk)) / N)
+xx <- log10(x)
+yy <- log10(Pexc)
+
+# --- 2 Prepare colors dynamically ---
+# n_models <- length(models_to_use)
+# colors <- brewer.pal(min(8, n_models), "Set1")  # distinct colors
+# names(colors) <- models_to_use
+
+# --- 3 Compute RRMSE for each model ---
+gofRRMSE <- function(x, y_model) {
+  y_empirical <- log10(sapply(x, function(xk) length(which(10^x >= 10^xk)) / length(x)))
+  sqrt(mean((y_empirical - y_model)^2)) / (max(y_empirical) - min(y_empirical))
+}
+
+rrmse_results <- sapply(models_to_use, function(mod) {
+  cdf_vals <- cdf_table[[paste0(mod, "_cdf")]]
+  y_model <- log10(1 - cdf_vals)
+  gofRRMSE(xx, y_model)
+})
+
+# --- 4 Prepare legend labels with RRMSE ---
+legend_labels <- paste0(models_to_use, " (RRMSE=", round(rrmse_results, 3), ")")
+
+# --- 5 Plot log-log exceedance probability dynamically ---
+plot(xx, yy, type = "p", lwd = 2, col = "black",
+     xlab = "log10(r)", ylab = "log10(P(R>=r))",
+     main = paste0(species_name, ": CDF(exceedance)"))
+
+for (i in seq_along(models_to_use)) {
+  mod <- models_to_use[i]
+  cdf_vals <- cdf_table[[paste0(mod, "_cdf")]]
+  lines(xx, log10(1 - cdf_vals), col = colors[mod], lwd = 2)
+}
+
+legend("bottomleft", legend = legend_labels, col = colors[models_to_use], lwd = 2)
+
+
+readline(prompt = "Press [Enter] to histogram plot...")
+
 
 
 # PLOTS: potential distributions ------------------------------------------
