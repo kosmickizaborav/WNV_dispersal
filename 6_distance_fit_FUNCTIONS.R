@@ -1,231 +1,174 @@
-# CDF plots Fede ---------------------------------------------------------------
+# PDF definitions---taken from dispfit package----------------------------------
 
+pdf_function <- function(mname){
 
+  dist.rayleigh <- function (r, a, b = NULL) {
+    fg <- 2*pi*r*(1/(pi*a^2)) * exp(-r^2/a^2)
+  }
+  
+  dist.exponential <- function (r, a, b = NULL) {
+    2*pi*r*(1 / (2 * pi * a ^ 2 )) * exp(-r/a)
+    # corrected function, adapted from Nathan 2012
+  }
+  
+  dist.generalnormal <- function(r, a, b) {
+    2 * pi * r * (b / (2 * pi * (a^2) * gamma(2 / b))) * exp(- (r / a)^b)
+  }
 
+  dist.2dt <- function(r, a, b) {
+    2 * pi * r * ((b - 1) / (pi * a^2)) * ((1 + (r^2) / (a^2))^(-b))
+  }
 
-# PDF definition - Fede ---------------------------------------------------
+  dist.geometric <- function (r, a, b) {
+    2*pi*r*(((b - 2) * (b - 1)) / (2 * pi * (a^2))) * ((1 + (r / a)) ^ -b)
+  }
 
+  dist.lognorm <- function (r, a, b) {
+    2*pi*r * (1 / (((2 * pi) ^ (3/2)) * (b * (r ^ 2)))) * exp(-(log(r / a)^2) / (2 * (b ^ 2)))
+  }
 
-pdf_function_fede <- function(mname){
-  
-  
-  pdf_rayleigh <- function(r, a, b = NULL) {
-    ifelse(r >= 0, 1 / (pi * a^2) * exp(-(r / a)^2), 0)
+  dist.wald <- function (r, a, b) {
+    2*pi*r * (sqrt(b)/sqrt(8 * (pi^3) * (r^5))) * exp(-(b * ((r - a)^2))/(2 * (a^2) * r))
   }
-  
-  pdf_exponential <- function(r, a, b = NULL) {
-    ifelse(r >= 0, 1 / (2 * pi * a^2) * exp(-r / a), 0)
+
+  dist.weibull <- function (r, a, b) {
+    2*pi*r * (b/(2*pi*a^b)) * (r^(b-2)) * exp(-(r^b/a^b))
+    ## function from Austerlitz 2004
   }
-  
-  pdf_generalized_normal <- function(r, a, b) {
-    ifelse(r >= 0, b / (2 * pi * a^2 * gamma(2 / b)) * exp(-(r / a)^b), 0)
+
+  dist.gamma <- function (r, a, b) {
+    2*pi*r * (1 / (2 * pi * (a^2) * gamma(b))) * ((r/a)^(b-2)) * exp(-r/a)
   }
-  
-  pdf_2dt <- function(r, a, b) {
-    ifelse(r >= 0, (b - 1) / (pi * a^2) * (1 + (r / a)^2)^(-b), 0)
-  }
-  
-  pdf_geometric <- function(r, a, b) {
-    ifelse(r >= 0, ((b - 2) * (b - 1)) / (2 * pi * a^2) * (1 + r / a)^(-b), 0)
-  }
-  
-  pdf_lognormal <- function(r, a, b) {
-    mu <- log(a)
-    s <- b
-    out <- rep(0, length(r))
-    pos <- r > 0
-    out[pos] <- (1 / (r[pos] * s * sqrt(2 * pi))) * exp(- (log(r[pos]) - mu)^2 / (2 * s^2))
-    out
-  }
-  
-  pdf_wald <- function(r, a, b) {
-    pos <- r > 0
-    out <- rep(0, length(r))
-    out[pos] <- sqrt(b) / sqrt(8 * pi * r[pos]^5) * exp(- (b * (r[pos] - a)^2) / (2 * a^2 * r[pos]))
-    out
-  }
-  
-  #shape=b; scale=a
-  pdf_weibull <- function(r, a, b) {
-    ifelse(r >= 0, b / (2 * pi * a^b) * r^(b - 2) * exp(-(r / a)^b), 0)
-  }
-  
-  pdf_weibull_radial <- function(r, a, b) {
-    ifelse(r >= 0, 2*pi*r*(b / (2 * pi * a^b) * r^(b - 2) * exp(-(r / a)^b)), 0)
-  }
-  
-  
-  pdf_gamma <- function(r, a, b) {
-    ifelse(r >= 0, 1 / (2 * pi * a^2 * gamma(b)) * (r / a)^(b - 2) * exp(-r / a), 0)
-  }
-  
-  
+
   # Use switch to return the appropriate PDF function
   switch(
     mname,
-    rayleigh = pdf_rayleigh,
-    exponential = pdf_exponential,
-    "general normal" = pdf_generalized_normal,
-    "2Dt" = pdf_2dt,
-    geometric = pdf_geometric,
-    lognormal = pdf_lognormal,
-    wald = pdf_wald,
-    weibull = pdf_weibull,
-    weibull_radial = pdf_weibull_radial,
-    gamma = pdf_gamma,
+    rayleigh = dist.rayleigh,
+    exponential = dist.exponential,
+    "general normal" = dist.generalnormal,
+    "2Dt" = dist.2dt,
+    geometric = dist.geometric,
+    lognormal = dist.lognorm,
+    wald = dist.wald,
+    weibull = dist.weibull,
+    gamma = dist.gamma,
     stop("Unknown model name!")
   )
-  
+
 }
 
-# CDF DEFINITIONS---------------------------------------------------------------
 
-
-cdf_function_fede <- function(mname, ...){
+cdf_function <- function(mname) {
   
-  # Numeric CDF (general)
+  # safe single integration -> numeric(1)
+  safe_integrate_one <- function(pdf_func, r_val, a, b = NULL) {
+    
+    if (is.na(r_val) || r_val <= 0) return(0)
+    
+    integrand <- function(t) pdf_func(t, a, b)  # assumes pdf_func already radial
+    
+    res <- tryCatch(
+      integrate(integrand, lower = 0, upper = r_val),
+      error   = function(e) list(value = NA_real_),
+      warning = function(w) {
+        tryCatch(integrate(integrand, lower = 0, upper = r_val, rel.tol = 1e-6),
+                 error = function(e) list(value = NA_real_))
+      }
+    )
+    val <- if(is.list(res) && !is.null(res$value)) res$value else as.numeric(res)
+    if (length(val) == 0) NA_real_ else as.numeric(val)[1]
+  }
+  
+  # numeric CDF that ALWAYS returns numeric vector of same length as r_vals
   cdf_numeric <- function(pdf_func, r_vals, a, b = NULL) {
-    sapply(r_vals, function(r) {
-      if (r <= 0) return(0)
-      integrate(function(t) pdf_func(t, a, b), 0, r)$value
-    })
+    vapply(
+      r_vals,
+      FUN = function(r) safe_integrate_one(pdf_func, r, a = a, b = b),
+      FUN.VALUE = numeric(1),
+      USE.NAMES = FALSE
+    )
   }
   
-  # Numeric CDF (2D expressed radially)
-  cdf_numeric_radial <- function(pdf_func, r_vals, a, b = NULL) {
-    sapply(r_vals, function(r) {
-      if (r <= 0) return(0)
-      integrate(function(t) 2 * pi * t * pdf_func(t, a, b), 0, r)$value
-    })
+  # return a function with explicit signature (avoid ambiguous ...)
+  function(pdf_fun, r_vals, a, b = NULL) {
+    cdf_numeric(pdf_fun, r_vals, a, b)
   }
-  
-  # adjust if needed
-  radial_cdfs <- c("general normal", "2Dt", "geometric", "weibull", "gamma") 
-  
-  if(mname %in% radial_cdfs){
-    fn <- cdf_numeric_radial
-  } else {
-    fn <- cdf_numeric
-  }
-  
-  function(...) fn(...)
-  # cdf_func_list <- lapply(models_to_use, function(mod) {
-  #   if (mod %in% radial_cdfs) return(cdf_numeric_radial) 
-  #   else return(cdf_numeric)  # e.g., lognormal
-  # })
-  # names(cdf_func_list) <- models_to_use
-  
-  
-  # # Analytical CDFs (when available... but not used in this code)
-  # cdf_rayleigh_analytic <- function(r, a, b = NULL) { 1 - exp(-(r / a)^2) } # standard version
-  # cdf_exponential_analytic <- function(r, a, b = NULL) { 1 - exp(-r / a) }
-  # cdf_lognormal_analytic <- function(r, a, b) { plnorm(r, meanlog = log(a), sdlog = b) }
-  # cdf_gamma_analytic <- function(r, a, b) { pgamma(r, shape = b-1, scale = a) }
-  # cdf_weibull_analytic <- function(r, a, b) { pweibull(r, shape = b-1, scale = a) }
-  # cdf_2dt_analytic <- function(r, a, b) {1 - (1 + (r / a)^2)^(1 - b)}
   
 }
 
 
 
-# # PDF definitions---taken from dispfit package----------------------------------
-# 
-# pdf_function <- function(mname){
-#   
-#   dist.rayleigh <- function (r, a) {
-#     fg <- 2*pi*r*(1/(pi*a^2)) * exp(-r^2/a^2)
-#   }
-#   
-#   dist.exponential <- function (r, a) {
-#     2*pi*r*(1 / (2 * pi * a ^ 2 )) * exp(-r/a) 
-#     # corrected function, adapted from Nathan 2012
-#   }
-#   
-#   dist.generalnormal <- function (r, a, b) {
-#     fgeneralnormal <- 2*pi*r*(b / (2 * pi * (a^2) * gamma(2 / b))) * exp(-(r / a) ^ b)
-#   }
-#   
-#   dist.2dt <- function (r, a, b) {
-#     f2dt <- 2*pi*r*((b-1) / (pi*(a^2))) * ((1 + (r^2)/(a^2))^(-b))
-#   }
-#   
-#   dist.geometric <- function (r, a, b) {
-#     2*pi*r*(((b - 2) * (b - 1)) / (2 * pi * (a^2))) * ((1 + (r / a)) ^ -b)
-#   }
-#   
-#   dist.lognorm <- function (r, a, b) {
-#     2*pi*r * (1 / (((2 * pi) ^ (3/2)) * (b * (r ^ 2)))) * exp(-(log(r / a)^2) / (2 * (b ^ 2)))
-#   }
-#   
-#   dist.wald <- function (r, a, b) {
-#     fwald <- 2*pi*r * (sqrt(b)/sqrt(8 * (pi^3) * (r^5))) * exp(-(b * ((r - a)^2))/(2 * (a^2) * r))
-#   }
-#   
-#   dist.weibull <- function (r, a, b) {
-#     fw <- 2*pi*r * (b/(2*pi*a^b)) * (r^(b-2)) * exp(-(r^b/a^b)) 
-#     ## function from Austerlitz 2004
-#   }
-#   
-#   dist.gamma <- function (r, a, b) {
-#     fgamma <- 2*pi*r * (1 / (2 * pi * (a^2) * gamma(b))) * ((r/a)^(b-2)) * exp(-r/a)
-#   }
-#   
-#   # Use switch to return the appropriate PDF function
-#   switch(
-#     mname,
-#     rayleigh = dist.rayleigh,
-#     exponential = dist.exponential,
-#     "general normal" = dist.generalnormal,
-#     "2Dt" = dist.2dt,
-#     geometric = dist.geometric,
-#     lognormal = dist.lognorm,
-#     wald = dist.wald,
-#     weibull = dist.weibull,
-#     gamma = dist.gamma,
-#     stop("Unknown model name!")
-#   )
-#   
-# }
-# 
-# 
 
-# # CDF function (calls pdf_function() for numeric integration)
+
+# CDF function (calls pdf_function() for numeric integration)
 # cdf_function <- function(mname) {
 #   
-#   # --- Analytic CDFs --- #
-#   dist.rayleigh.cdf <- function(r, a) 1 - exp(-r^2 / a^2)
-#   dist.exponential.cdf <- function(r, a) 1 - exp(-r / a) * (1 + r / a)
-#   dist.2dt.cdf <- function(r, a, b) 1 - (1 + (r^2)/(a^2))^(1 - b)
-#   dist.geometric.cdf <- function(r, a, b) 1 - (1 + (r / a))^(2 - b)
-#   dist.weibull.cdf <- function(r, a, b) 1 - exp(-(r^b / a^b))
+#   # Analytic CDFs -- signature: function(pdf_fun, r_vals, a, b = NULL)
+#   cdf_rayleigh_analytic <- function(pdf_fun, r_vals, a, b = NULL) {
+#     1 - exp(-(r_vals / a)^2)
+#   }
+#   cdf_exponential_analytic <- function(pdf_fun, r_vals, a, b = NULL) {
+#     # CDF for radial-exponential (with the pdf already radial as in pdf_function)
+#     1 - (1 + r_vals / a) * exp(-r_vals / a)
+#   }
+#   cdf_lognormal_analytic <- function(pdf_fun, r_vals, a, b = NULL) {
+#     # here 'a' and 'b' follow your prior convention: a = exp(meanlog), b = sdlog
+#     plnorm(r_vals, meanlog = log(a), sdlog = b)
+#   }
+#   cdf_gamma_analytic <- function(pdf_fun, r_vals, a, b = NULL) {
+#     pgamma(r_vals, shape = b - 1, scale = a)
+#   }
+#   cdf_weibull_analytic <- function(pdf_fun, r_vals, a, b = NULL) {
+#     pweibull(r_vals, shape = b - 1, scale = a)
+#   }
+#   cdf_2dt_analytic <- function(pdf_fun, r_vals, a, b = NULL) {
+#     1 - (1 + (r_vals / a)^2)^(1 - b)
+#   }
+#   cdf_geometric_analytic <- function(pdf_fun, r_vals, a, b = NULL) {
+#     1 - (1 + (r_vals / a))^(2 - b)
+#   }
 #   
+#   # Safe single integration returning numeric(1)
+#   safe_integrate_one <- function(pdf_func, r_val, a, b = NULL) {
+#     if (is.na(r_val) || r_val <= 0) return(0)
+#     integrand <- function(t) pdf_func(t, a, b) # pdf_func returns radial pdf already
+#     res <- tryCatch(
+#       integrate(integrand, lower = 0, upper = r_val, rel.tol = 1e-8),
+#       error = function(e) list(value = NA_real_),
+#       warning = function(w) {
+#         # try again with relaxed tolerance, otherwise NA
+#         tryCatch(integrate(integrand, lower = 0, upper = r_val, rel.tol = 1e-6),
+#                  error = function(e) list(value = NA_real_))
+#       }
+#     )
+#     val <- if (is.list(res) && !is.null(res$value)) res$value else as.numeric(res)
+#     if (length(val) == 0) NA_real_ else as.numeric(val)[1]
+#   }
 #   
-#   # # Generic numeric CDF helper (radial form)
-# cdf_numeric <- function(pdf_func, r, a, b = NULL) {
-#   sapply(r, function(ri) {
-#     if (ri <= 0) return(0)
-#     integrate(function(x) pdf_func(x, a, b), 0, ri)$value
-#   })
-# }
-# 
+#   # Numeric CDF fallback: integrate the radial pdf (pdf_func) directly
+#   cdf_numeric_safe <- function(pdf_func, r_vals, a, b = NULL) {
+#     vapply(r_vals, FUN.VALUE = numeric(1), USE.NAMES = FALSE, FUN = function(rr) {
+#       safe_integrate_one(pdf_func, rr, a = a, b = b)
+#     })
+#   }
 #   
-#   # --- Numeric fallback (calls the existing pdf_function) --- #
+#   # get pdf (used by numeric fallback)
 #   pdf_func <- pdf_function(mname)
-#   dist.numeric.cdf <- function(r, a, b = NULL) cdf_numeric(pdf_func, r, a, b)
 #   
-#   # --- Return correct one --- #
+#   # choose and return a function that always has the same signature:
+#   # function(pdf_fun, r_vals, a, b = NULL) -> numeric vector length(r_vals)
 #   switch(
 #     mname,
-#     rayleigh = dist.rayleigh.cdf,
-#     exponential = dist.exponential.cdf,
-#     "2Dt" = dist.2dt.cdf,
-#     geometric = dist.geometric.cdf,
-#     weibull = dist.weibull.cdf,
-#     "general normal" = dist.numeric.cdf,
-#     lognormal = dist.numeric.cdf,
-#     wald = dist.numeric.cdf,
-#     gamma = dist.numeric.cdf,
-#     stop("Unknown model name!")
+#     rayleigh = cdf_rayleigh_analytic,
+#     exponential = cdf_exponential_analytic,
+#     lognormal = cdf_lognormal_analytic,
+#     gamma = cdf_gamma_analytic,
+#     weibull = cdf_weibull_analytic,
+#     "2Dt" = cdf_2dt_analytic,
+#     geometric = cdf_geometric_analytic,
+#     # fallbacks for models without a closed-form (use numerical integration)
+#     "general normal" = cdf_numeric_safe,
+#     wald = cdf_numeric_safe,
+#     stop("Unknown model name: ", mname)
 #   )
 # }
-

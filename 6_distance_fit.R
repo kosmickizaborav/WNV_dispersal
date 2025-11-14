@@ -1,4 +1,3 @@
-library(fitdistrplus)
 library(data.table)
 library(ggplot2)
 library(patchwork)
@@ -22,6 +21,7 @@ dt_overview <- fread(
     pattern = ".*filter_30_max_active_steps.*continent.csv", 
     full.names = T)
   )
+
 n_fltr <- 30
 
 target_sp <- dt_overview[, species]
@@ -39,8 +39,8 @@ fin_name <- "4_all_tracks_max_active_steps_nauticalDawn_nauticalDusk_continent.r
 
 dist_dirs <- file.path(study_dir, gsub(" ", "_", target_sp), "6_distances")
 files <- file.path(dist_dirs, fin_name)
-files_out <- file.path(
-  median_dir, paste0(gsub(" ", "_", target_sp), "_sl_median_fit.rds"))
+
+files_out <- gsub(".rds", "_sl_median_fit.rds", files)
 files <- files[!file.exists(files_out)]
 
 lfl <- length(files)
@@ -397,265 +397,126 @@ if(lf > 0){
 
 # CDF Fede plots ---------------------------------------------------------------
 
-fin_name <- "4_all_tracks_max_active_steps_nauticalDawn_nauticalDusk_continent.rds"
-
-fits_dt <- fread(file.path(data_dir, "6_distance_fit_overview_sl_median.csv"))
-#fits_dt <- fits_dt[error_occurred == F][delta_AIC < 2]
-
 file_fits <- list.files(file.path(fit_dir, "Sl_median"), full.names = T)
 
 lf <- length(file_fits)
 
-fin <- file_fits[1]
-sp <- gsub("_sl_median_fit.rds", "", basename(fin))
+plots_cdf <- file.path(fit_dir, "Sl_median_CDF_plots")
+dir.create(plots_cdf, showWarnings = F)
+
+dir_cdf <- file.path(fit_dir, "Sl_median_CDF")
+dir.create(dir_cdf, showWarnings = F)
 
 
-# get only fits without errors
-f <- lapply(readRDS(fin), function(x){
-  
-  if(is.null(x$result)) { return(NULL)}
-  x$result
-  
-  })
-
-#SELECTING MODEL: criteria (WE SHOULD CHECK dAIC below 2)??
-# Find which models have been fitted and take out exp, rayleigh, and wald (very unfrequent with dmax)
-subset_fitmodels <- fits_dt[
-  species == gsub(".rds", "", basename(fin)), fitted_function]
-subset_fitmodels <- setdiff(subset_fitmodels,c("exponential","rayleigh","wald"))
-models_to_use <- intersect(names(f), subset_fitmodels)
-
-
-r_dt <- rbindlist(lapply(names(f), function(mname){
-  
-  krnl <- f[[mname]]
-  
-  data <- krnl$data
-  
-  a <- krnl[["distribution.parameters"]][["Parameter 1"]]
-  a_low <- krnl[["distribution.parameters"]][["Parameter 1 lower CI"]]
-  a_up <- krnl[["distribution.parameters"]][["Parameter 1 upper CI"]]
-  
-  b <- krnl[["distribution.parameters"]][["Parameter 2"]]
-  b_low <- krnl[["distribution.parameters"]][["Parameter 2 lower CI"]]
-  b_up <- krnl[["distribution.parameters"]][["Parameter 2 upper CI"]]
+lapply(seq_along(file_fits), function(i){
   
   
-  data.table(
-    cdf = cdf_function_fede(mname)(
-      pdf_fun = pdf_function_fede(mname), r_vals = data, a = a, b = b),
-    cdf_lower = cdf_function_fede(mname)(
-      pdf_fun = pdf_function_fede(mname), r_vals = data, a = a_low, b = b_low),
-    cdf_upper = cdf_function_fede(mname)(
-      pdf_fun = pdf_function_fede(mname), r_vals = data, a = a_up, b = b_up), 
-    data = data
-  )[, fitted_function := mname]
+  fin <- file_fits[i]
+  
+  pname <- file.path(plots_cdf, gsub(".rds", ".png", basename(fin)))
+  
+  sp <- gsub("_sl_median_fit.rds", "", basename(fin))
+  
+  f <- lapply(readRDS(fin), function(x) x$result)
+  
+  # get only fits without errors
+  selected_mods <- unlist(lapply(names(f), function(mname){
+    if(!is.null(f[[mname]])) {return(mname)} else {return(NULL)}
+  }))
+  
+  #SELECTING MODEL: criteria (WE SHOULD CHECK dAIC below 2)??
+  # Find which models have been fitted and take out exp, rayleigh, 
+  # and wald (very unfrequent with dmax)
+  # subset_fitmodels <- fits_dt[
+  #   species == gsub(".rds", "", basename(fin)), fitted_function]
+  # subset_fitmodels <- setdiff(subset_fitmodels,c("exponential","rayleigh","wald"))
+  # models_to_use <- intersect(names(f), subset_fitmodels)
   
   
-}))
-
-# --- 2 Prepare colors dynamically ---
-n_models <- length(models_to_use)
-colors <- brewer.pal(min(8, n_models), "Set1")  # distinct colors
-names(colors) <- models_to_use
-
-# --- 3 Compute RRMSE for each model ---
-gofRRMSE <- function(x, y_model) {
-  y_empirical <- log10(sapply(x, function(xk) length(which(10^x >= 10^xk)) / length(x)))
-  sqrt(mean((y_empirical - y_model)^2)) / (max(y_empirical) - min(y_empirical))
-}
-
-rrmse_results <- sapply(models_to_use, function(mod) {
-  cdf_vals <- cdf_table[[paste0(mod, "_cdf")]]
-  y_model <- log10(1 - cdf_vals)
-  gofRRMSE(xx, y_model)
-})
-
-cdf_table <- r_dt[fitted_function == fitted_function[1]]
-
-# --- 1️ Prepare exceedance probability ---
-x <- sort(cdf_table$data)
-N <- length(x)
-Pexc <- sapply(x, function(xk) length(which(x >= xk)) / N)
-xx <- log10(x)
-yy <- log10(Pexc)
-
-
-setorder(r_dt, fitted_function, data)
-# Compute exceedance probability and its log10
-fits_dt[, Pexc := rev(seq_len(.N)) / .N, by = fitted_function]     
-fit_dt[, xx := log10(sl_median), by = fitted_function]
-fits_dt[, yy := log10(Pexc), by = fitted_function]
-
-# --- 3 Compute RRMSE for each model ---
-gofRRMSE <- function(x, y_model) {
-  y_empirical <- log10(sapply(x, function(xk) length(which(10^x >= 10^xk)) / length(x)))
-  sqrt(mean((y_empirical - y_model)^2)) / (max(y_empirical) - min(y_empirical))
-}
-
-
-
-rrmse_results <- sapply(models_to_use, function(mod) {
-  cdf_vals <- cdf_table[[paste0(mod, "_cdf")]]
-  y_model <- log10(1 - cdf_vals)
-  gofRRMSE(xx, y_model)
-})
-
-
-
-ggplot(r_dt) +
-  geom_line(
-    aes(x = data, y = cdf, color = fitted_function), size = 1
-  ) +
-  geom_ribbon(
-    aes(x = data, ymin = cdf_lower, ymax = cdf_upper, fill = fitted_function), 
-    alpha = 0.3
-  ) 
-
-data <- sort(f$lognormal$result$data)
-cdf_table <- data.frame(r = data, data = data)
-# --- Step 4: Loop over models_to_use and compute CDFs dynamically ---
-for(mod in models_to_use) {
-  pdf_fun <- pdf_list[[mod]]
-  cdf_fun <- cdf_func_list[[mod]]
-  a <- params[[mod]]$a
-  b <- params[[mod]]$b
-  cdf_table[[paste0(mod, "_cdf")]] <- cdf_fun(pdf_fun, data, a = a, b = b)
-}
-
-
-
-# PLOTING DYNAMICALLY subset models
-
-library(RColorBrewer)
-
-# --- 1️ Prepare exceedance probability ---
-# 
-x <- sort(dt$sl_median)
-N <- length(x)
-Pexc <- sapply(x, function(xk) length(which(x >= xk)) / N)
-xx <- log10(x)
-yy <- log10(Pexc)
-
-# --- 2 Prepare colors dynamically ---
-# n_models <- length(models_to_use)
-# colors <- brewer.pal(min(8, n_models), "Set1")  # distinct colors
-# names(colors) <- models_to_use
-
-# --- 3 Compute RRMSE for each model ---
-gofRRMSE <- function(x, y_model) {
-  y_empirical <- log10(sapply(x, function(xk) length(which(10^x >= 10^xk)) / length(x)))
-  sqrt(mean((y_empirical - y_model)^2)) / (max(y_empirical) - min(y_empirical))
-}
-
-rrmse_results <- sapply(models_to_use, function(mod) {
-  cdf_vals <- cdf_table[[paste0(mod, "_cdf")]]
-  y_model <- log10(1 - cdf_vals)
-  gofRRMSE(xx, y_model)
-})
-
-# --- 4 Prepare legend labels with RRMSE ---
-legend_labels <- paste0(models_to_use, " (RRMSE=", round(rrmse_results, 3), ")")
-
-# --- 5 Plot log-log exceedance probability dynamically ---
-plot(xx, yy, type = "p", lwd = 2, col = "black",
-     xlab = "log10(r)", ylab = "log10(P(R>=r))",
-     main = paste0(species_name, ": CDF(exceedance)"))
-
-for (i in seq_along(models_to_use)) {
-  mod <- models_to_use[i]
-  cdf_vals <- cdf_table[[paste0(mod, "_cdf")]]
-  lines(xx, log10(1 - cdf_vals), col = colors[mod], lwd = 2)
-}
-
-legend("bottomleft", legend = legend_labels, col = colors[models_to_use], lwd = 2)
-
-
-readline(prompt = "Press [Enter] to histogram plot...")
-
-
-
-# PLOTS: potential distributions ------------------------------------------
-
-# A non-zero skewness reveals a lack of symmetry of the empirical distribution, 
-# while the kurtosis value quantifies the weight of tails in comparison to 
-# the normal distribution for which the kurtosis equals 3. 
-
-fin_name <- "4_all_tracks_max_active_steps_nauticalDawn_nauticalDusk_continent.rds"
-files <- list.files(dist_dirs, pattern = fin_name, full.names = T)
-
-filter30 <- file.path(plot_dir, "1_filter_30")
-dir.create(filter30, showWarnings = F)
-
-lapply(seq_along(files), function(n){
+  cdf_dt <- rbindlist(lapply(names(f), function(mname){
+    
+    krnl <- f[[mname]]
+    
+    data <- sort(krnl$data)
+    
+    a <- krnl[["distribution.parameters"]][["Parameter 1"]]
+    a_low <- krnl[["distribution.parameters"]][["Parameter 1 lower CI"]]
+    a_up <- krnl[["distribution.parameters"]][["Parameter 1 upper CI"]]
+    
+    b <- krnl[["distribution.parameters"]][["Parameter 2"]]
+    b_low <- krnl[["distribution.parameters"]][["Parameter 2 lower CI"]]
+    b_up <- krnl[["distribution.parameters"]][["Parameter 2 upper CI"]]
+    
+    data.table(
+      cdf = cdf_function(mname)(
+        pdf_fun = pdf_function(mname), r = data, a = a, b = b),
+      cdf_lower = cdf_function(mname)(
+        pdf_fun = pdf_function(mname), r = data, a = a_low, b = b_low),
+      cdf_upper = cdf_function(mname)(
+        pdf_fun = pdf_function(mname), r = data, a = a_up, b = b_up),
+      data = data, 
+      fitted_function = mname
+    )
+    
+    
+  }), fill = T)
   
-  fin <- files[n]
-  sp <- gsub(".*Studies/(.*)_(.*)/6_distances/.*", "\\1 \\2", fin)
   
-  dt <- fread(fin)
+  cdf_vars <- c("cdf", "cdf_lower", "cdf_upper")
   
-  dt <- dt[, n_steps := .N, by = file][n_steps >= 30]
-  # to km
-  dt[, sl_ := sl_/1000] 
-
+  cdf_dt[, (cdf_vars) := lapply(.SD, function(x) {
+    bad <- !is.na(x) & (x < 0 | x > 1 | (1 - x) <= 0)
+    # replace bad entries with NA_real_, keep others
+    replace(x, bad, NA_real_)
+  }), .SDcols = cdf_vars]
   
-  n_steps <- dt_overview[species == sp, N_steps]
-  n_depl <- dt_overview[species == sp, N_deployments]
-  shennon <- dt_overview[species == sp, Shennon_n_steps]
+  setorder(cdf_dt, fitted_function, data)
+  # Compute exceedance probability and its log10
+  cdf_dt[, Pexc := .N:1 / .N, by = fitted_function]     
+  cdf_dt[, xx := log10(data)] 
+  cdf_dt[, yy := log10(Pexc)]
   
-  cf <- descdist(dt$sl_, boot = 1000)
+  # compute model log-exceedance and then RRMSE
+  cdf_dt[, y_model := log10(1 - cdf)] 
   
-  pname <- paste0(gsub(" ", "_", sp), "_max_step_distribution_check.png")
+  cdf_dt[, resid := yy - y_model]
+  cdf_dt[, yy_diff := diff(range(yy, na.rm = T))]
   
-  png(
-    filename = file.path(filter30, pname),
-    width = 15, height = 5, units = "in", res = 300
+  # compared with Fede's code and gives the same output
+  cdf_dt[, RRMSE := sqrt(mean((yy - y_model)^2, na.rm = TRUE)) / yy_diff, 
+         by = fitted_function]
+  
+  cdf_dt[, leg_txt := paste0(
+    fitted_function, " (RRMSE = ", round(RRMSE, 3), ")")]
+  
+  cdf_dt |> 
+    ggplot() +
+    geom_point(
+      aes(x = xx, y = yy), color = "black", size = 1, alpha = 0.5
+    ) + 
+    geom_line(
+      aes(x = xx, y = log10(1 - cdf), color = leg_txt), linewidth = 1, alpha = 0.5
+    ) +
+    theme_bw() + 
+    labs(
+      x = "log10(r)", 
+      y = "log10(P(R>=r))", 
+      title = sprintf("%s: CDF (exceedance)", gsub("_", " ", sp)),
+      color = "Fitted model (RRMSE)"
+    ) + 
+    theme(
+      plot.title = element_text(size = 14, face = "bold")
+    )
+  
+  ggsave(
+    filename = pname, width = 10, height = 8, units = "in"
   )
   
-  par(mfrow = c(1, 3)) # 1 row, 2 columns
+  fwrite(cdf_dt, file = file.path(dir_cdf, basename(fin)))
   
-  #plotdist(dt$sl_, histo = TRUE, demp = TRUE)
-  
-  plot(
-    ecdf(dt$sl_), 
-    xlab = "max daily distance [km]", 
-    main = "Empirical CDF", 
-    ylab = "ecdf(x)")
-
-  
-  # # Plot ggplot
-  hist(
-    dt$sl_, breaks = 100, xlab = "max daily distance [km]", main = "")
-  
-  # Plot descdist
-  # 
-  # By default, unbiased estimations of the three last statistics are provided.
-  # Nevertheless, the argument method can be changed from "unbiased" (default) 
-  # to "sample" to obtain them without correction for bias. 
-  # 
-  # For some distributions (normal, uniform, logistic, exponential),
-  # there is only one possible value for the skewness and the kurtosis. 
-  # Thus, the distribution is represented by a single point on the plot. 
-  # 
-  # For other distributions, areas of possible values are represented, 
-  # consisting in lines (as for gamma and lognormal distributions), 
-  # or larger areas (as for beta distribution).
-  descdist(dt$sl_, boot = 1000)
-  
-  tit <- sprintf(
-    "%s | N tracks = %d | N steps = %d | shennon: %.3f",
-    sp, n_depl, n_steps, shennon)
-  
-  # Add a common main title
-  mtext(tit, side = 3, line = -2, outer = TRUE, cex = 1.5)
-  
-  dev.off()
-  
-  
+  cat(i, " / ", lf, "\n")
   
 })
-
-
 
 
 

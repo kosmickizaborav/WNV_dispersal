@@ -31,140 +31,124 @@ rm(target_sp)
 
 # 1 - Make overview table ------------------------------------------------------
 
-# INPUT
-fdt <- data.table(
-  finm = c(
-    "4_all_tracks_max_active_steps_nauticalDawn_nauticalDusk_continent.rds", 
-    "4_all_tracks_max_active_steps_nauticalDawn_nauticalDusk_continent.rds", 
-    "3_all_tracks_median_active_steps_nauticalDawn_nauticalDusk_continent.rds" 
-  ), 
-  dist_var = c("sl_", "sl_median", "sl_")
-)
+fout <- "6_overview_filter_20_max_active_steps_nauticalDawn_nauticalDusk_continent.csv"
 
-fdt <- fdt[, .(n_filter = c(10, 30)), by = .(finm, dist_var)]
+finname <- "4_.*_max_active_steps_nauticalDawn_nauticalDusk_continent.rds"
 
+n_fltr <- 20
 
-lapply(1:nrow(fdt), function(i){
-  
-  finm <- fdt$finm[i]
-  dist_col <- fdt$dist_var[i]
-  n_fltr <- fdt$n_filter[i]
-  
-  files <- list.files(dist_dirs, pattern = finm, full.names = TRUE)
-  nf <- length(files)
-  
-  foverview <- gsub(
-    ".rds", ".csv", 
-    gsub("[43]_all_tracks", sprintf("6_overview_filter_%d", n_fltr), finm))
-  
-  if(dist_col == "sl_median"){
-    foverview <- gsub(".csv", "_sl_median.csv", foverview)
-  } 
-  
-  if(!file.exists(file.path(data_dir, foverview))){
-    
-    species_dt <- rbindlist(lapply(seq_along(files), function(n){
-      
-      fin <- files[n]
-      
-      dt <- fread(fin)
-      
-      # filter tracks that have less than 10 steps
-      dt <- dt[, n_steps := .N, by = file][n_steps >= n_fltr]
-      
-      if(nrow(dt) == 0){ return(NULL) }
-      
-      dt[, yd := day_cycle_to_yd(day_cycle_1)]
-      # extract sensor
-      dt[, sensor := sub(".*dep_(.*?)_sen.*", "\\1", file)][
-        , sensor := fcase(sensor == 653, "gps", sensor == 2299894820, "sigfox")]
-      
-      n_deploy_tot <- dt[, uniqueN(file)]
-      
-      # get track lengths and sensor
-      dt_per_file <- dt[, .(
-        n_days = uniqueN(day_cycle_1),
-        n_year_days = uniqueN(yd), 
-        sensor = unique(sensor), 
-        n_steps = unique(n_steps)
-      ), by = file]
-      
-      # remove duplicated trakcs - deployments with both gps and sigfox
-      dt_per_file[, track_id := sub("_dep_\\d+.*$", "", basename(file))]
-      
-      setorder(dt_per_file, sensor)
-      
-      dt_per_file[, duplicated_track := duplicated(track_id)]
-      dpltrks <- dt_per_file[duplicated_track == T, file]
-      
-      dt_per_file <- dt_per_file[duplicated_track == F]
-      dt <- dt[!file %in% dpltrks]
-      
-      cls <- c("n_days", "n_year_days")
-      
-      n_steps_tot <- sum(dt_per_file$n_steps)
-      
-      # extract stats for tracking times
-      dt_per_file <- dt_per_file[, c(
-        as.list(setNames(lapply(.SD, median), paste0("median_", cls))),
-        as.list(setNames(lapply(.SD, function(x) {
-          if(n_deploy_tot == 1) NA else paste(range(x), collapse = " - ") }),
-          paste0("range_", cls))),
-        N_gps = sum(sensor == "gps"),
-        N_sigfox = sum(sensor == "sigfox"), 
-        Shennon_n_steps = -sum(n_steps/n_steps_tot * log10(n_steps/n_steps_tot))
-      ), .SDcols = cls]
-      
-      dt[, yd := day_cycle_to_yd(day_cycle_1)]
-      # extract sensor
-      dt[, sensor := sub(".*dep_(.*?)_sen.*", "\\1", file)]
+files <- list.files(dist_dirs, pattern = finname, full.names = TRUE)
+nf <- length(files)
 
-      
-      if(dist_col == "sl_median"){ 
-        setnames(dt, old = "sl_median", new = "sl_median_old")
-        # when there was only one distance available no stats was calculated
-        dt[, sl_median := fifelse(
-          sl_n_steps == 1, as.numeric(sl_), as.numeric(sl_median_old))] 
-      }
-      
-      dt_out <- dt[, c(
-        species = gsub(".*/Studies/(.*?)_(.*?)/6_distances.*", "\\1 \\2", fin),
-        N_steps = .N, 
-        N_days = uniqueN(day_cycle_1),
-        N_year_days = uniqueN(yd),
-        N_deployments = uniqueN(file), 
-        sl_mean = mean(get(dist_col)),
-        as.list(setNames(
-          round(quantile(
-            get(dist_col), probs = c(0.05, 0.25, 0.5, 0.75, 0.95)), 2), 
-          paste0("sl_", c("05", "25", "50", "75", "95")))), 
-        continents = paste(unique(continent), collapse = ", "), 
-        sensors = paste(unique(sensor), collapse = ", ")
-      )]
-      
-      cbind(dt_out, dt_per_file)
-      
-    }), fill = T)
-    
-    # add traits and phylogeny
-    species_dt <- merge(species_dt, traits_dt, by = "species", all.x = T)
-    
-    cls <- c(
-      "species", "family", "order", "migration", "activity", "N_deployments")
-    
-    setcolorder(species_dt, neworder = cls)
-    
-    species_dt <- species_dt[!(sl_50 == 0 & sl_75 == 0 & sl_25 == 0)]
-    
-    fwrite(species_dt, file.path(data_dir, foverview))
-    
-  }
+if(!file.exists(file.path(data_dir, fout))){
   
-  cat(finm, "DONE!\n")
+  species_dt <- rbindlist(lapply(seq_along(files), function(n){
+    
+    fin <- files[n]
+    
+    dt <- fread(fin)
+    
+    # only keep the days in which maximum daily distance was at least 50m
+    # double the average GPS error, otherwise we assume no movement
+    dt <- dt[sl_ >= 50 & (sl_median >= 50 | is.na(sl_median))]
+    
+    # filter tracks that have less than 10 steps
+    dt <- dt[, n_steps := .N, by = file][n_steps >= n_fltr]
+    
+    if(nrow(dt) == 0){ return(NULL) }
+    
+    fwrite(dt, gsub(".rds", "_fltr_20_dist_50m.rds", fin))
+    
+    dt[, yd := day_cycle_to_yd(day_cycle_1)]
+    # extract sensor
+    dt[, sensor := sub(".*dep_(.*?)_sen.*", "\\1", file)][
+      , sensor := fcase(sensor == 653, "gps", sensor == 2299894820, "sigfox")]
+    
+    # get number of deployments
+    n_deploy_tot <- dt[, uniqueN(file)]
+    
+    # get track lengths and sensor
+    dt_per_file <- dt[, .(
+      n_days = uniqueN(day_cycle_1),
+      n_year_days = uniqueN(yd), 
+      sensor = unique(sensor), 
+      n_steps = unique(n_steps)
+    ), by = file]
+    
+    # remove duplicated trakcs - deployments with both gps and sigfox
+    dt_per_file[, track_id := sub("_dep_\\d+.*$", "", basename(file))]
+    
+    setorder(dt_per_file, sensor)
+    
+    dt_per_file[, duplicated_track := duplicated(track_id)]
+    dpltrks <- dt_per_file[duplicated_track == T, file]
+    
+    dt_per_file <- dt_per_file[duplicated_track == F]
+    dt <- dt[!file %in% dpltrks]
+    
+    n_steps_tot <- sum(dt_per_file$n_steps)
+    
+    cls <- c("n_days", "n_year_days")
+    # extract stats for tracking times - days of tracking
+    dt_per_file <- dt_per_file[, c(
+      as.list(setNames(lapply(.SD, median), paste0("median_", cls))),
+      as.list(setNames(lapply(.SD, function(x) {
+        if(n_deploy_tot == 1) NA else paste(range(x), collapse = " - ") }),
+        paste0("range_", cls))),
+      N_gps = sum(sensor == "gps"),
+      N_sigfox = sum(sensor == "sigfox"),
+      Shennon_n_steps = -sum(n_steps/n_steps_tot * log10(n_steps/n_steps_tot))
+    ), .SDcols = cls]
+    
+    dt[, yd := day_cycle_to_yd(day_cycle_1)]
+    # extract sensor
+    dt[, sensor := sub(".*dep_(.*?)_sen.*", "\\1", file)]
+    
+    setnames(dt, old = "sl_median", new = "sl_median_old")
+    
+    # when there was only one distance available no stats was calculated
+    dt[, sl_median := fifelse(
+      sl_n_steps == 1, as.numeric(sl_), as.numeric(sl_median_old))] 
+    
+   
+    dt_out <- dt[, c(
+      species = gsub(".*/Studies/(.*?)_(.*?)/6_distances.*", "\\1 \\2", fin),
+      n_steps = .N, 
+      n_days = uniqueN(day_cycle_1),
+      n_year_days = uniqueN(yd),
+      n_deployments = uniqueN(file), 
+      max_sl_mean = mean(sl_),
+      as.list(setNames(
+        round(quantile(
+          sl_, probs = c(0.05, 0.25, 0.5, 0.75, 0.95)), 2), 
+        paste0("max_sl_", c("05", "25", "50", "75", "95")))), 
+      median_sl_mean = mean(sl_),
+      as.list(setNames(
+        round(quantile(
+          sl_median, probs = c(0.05, 0.25, 0.5, 0.75, 0.95)), 2), 
+        paste0("sl_", c("q05", "q25", "median", "q75", "q95")))), 
+      continents = paste(unique(continent), collapse = ", ")
+    )]
+    
+    cbind(dt_out, dt_per_file)
+    
+  }), fill = T)
   
-  invisible(return(NULL))
+  # add traits and phylogeny
+  species_dt <- merge(species_dt, traits_dt, by = "species", all.x = T)
   
-})
+  cls <- c(
+    "species", "family", "order", "migration", "activity", "n_deployments")
+  
+  setcolorder(species_dt, neworder = cls)
+  
+  fwrite(species_dt, file.path(data_dir, fout))
+  
+}
+
+cat(finm, "DONE!\n")
+
+invisible(return(NULL))
 
 gc(verbose = F)
 
@@ -172,182 +156,242 @@ rm(fdt)
 
 
 
-# 2 - Stat param overview -----------------------------------------------------
-
-# INPUT
-fin_name <- "4_all_tracks_max_active_steps_nauticalDawn_nauticalDusk_continent.rds"
 
 
 
-species_dt <- rbindlist(lapply(seq_along(files), function(n){
-  
-  fin <- files[n]
-  
-  dt <- fread(fin)
-  
-  # filter tracks that have less than 10 steps
-  dt <- dt[, n_steps := .N, by = file][n_steps >= n_fltr]
-  
-  if(nrow(dt) == 0){ return(NULL) }
-  
-  dt[, yd := day_cycle_to_yd(day_cycle_1)]
-  # extract sensor
-  dt[, sensor := sub(".*dep_(.*?)_sen.*", "\\1", file)][
-    , sensor := fcase(sensor == 653, "gps", sensor == 2299894820, "sigfox")]
-  
-  n_deploy_tot <- dt[, uniqueN(file)]
-  
-  # get track lengths and sensor
-  dt_per_file <- dt[, .(
-    n_days = uniqueN(day_cycle_1),
-    n_year_days = uniqueN(yd), 
-    sensor = unique(sensor), 
-    n_steps = unique(n_steps)
-  ), by = file]
-  
-  # remove duplicated trakcs - deployments with both gps and sigfox
-  dt_per_file[, track_id := sub("_dep_\\d+.*$", "", basename(file))]
-  
-  setorder(dt_per_file, sensor)
-  
-  dt_per_file[, duplicated_track := duplicated(track_id)]
-  dpltrks <- dt_per_file[duplicated_track == T, file]
-  
-  dt_per_file <- dt_per_file[duplicated_track == F]
-  dt <- dt[!file %in% dpltrks]
-  
-  cls <- c("n_days", "n_year_days")
-  
-  n_steps_tot <- sum(dt_per_file$n_steps)
-  
-  # extract stats for tracking times
-  dt_per_file <- dt_per_file[, c(
-    as.list(setNames(lapply(.SD, median), paste0("median_", cls))),
-    as.list(setNames(lapply(.SD, function(x) {
-      if(n_deploy_tot == 1) NA else paste(range(x), collapse = " - ") }),
-      paste0("range_", cls))),
-    N_gps = sum(sensor == "gps"),
-    N_sigfox = sum(sensor == "sigfox"), 
-    Shennon_n_steps = -sum(n_steps/n_steps_tot * log10(n_steps/n_steps_tot))
-  ), .SDcols = cls]
-  
-  dt[, yd := day_cycle_to_yd(day_cycle_1)]
-  # extract sensor
-  dt[, sensor := sub(".*dep_(.*?)_sen.*", "\\1", file)]
-  
-  
-  if(dist_col == "sl_median"){ 
-    setnames(dt, old = "sl_median", new = "sl_median_old")
-    # when there was only one distance available no stats was calculated
-    dt[, sl_median := fifelse(
-      sl_n_steps == 1, as.numeric(sl_), as.numeric(sl_median_old))] 
-  }
-  
-  dt_out <- dt[, c(
-    species = gsub(".*/Studies/(.*?)_(.*?)/6_distances.*", "\\1 \\2", fin),
-    N_steps = .N, 
-    N_days = uniqueN(day_cycle_1),
-    N_year_days = uniqueN(yd),
-    N_deployments = uniqueN(file), 
-    sl_mean = mean(get(dist_col)),
-    as.list(setNames(
-      round(quantile(
-        get(dist_col), probs = c(0.05, 0.25, 0.5, 0.75, 0.95)), 2), 
-      paste0("sl_", c("05", "25", "50", "75", "95")))), 
-    continents = paste(unique(continent), collapse = ", "), 
-    sensors = paste(unique(sensor), collapse = ", ")
-  )]
-  
-  cbind(dt_out, dt_per_file)
-  
-}), fill = T)
-
-
-files <- list.files(data_dir, pattern = "6_overview.*\\.csv", full.names = T)
-
-dt_overview <- fread(
-  list.files(
-    data_dir, 
-    pattern = ".*filter_30_max_active_steps.*continent.csv", 
-    full.names = T)
-)
-n_fltr <- 30
-
-target_sp <- dt_overview[, species]
-
-
-disp_fit_dir <- file.path(data_dir, "Disp_fits")
-dir.create(disp_fit_dir, showWarnings = F)
+# # 2 - Stat param overview -----------------------------------------------------
+# 
+# # INPUT
+# fin_name <- "4_all_tracks_max_active_steps_nauticalDawn_nauticalDusk_continent.rds"
+# 
+# 
+# 
+# species_dt <- rbindlist(lapply(seq_along(files), function(n){
+#   
+#   fin <- files[n]
+#   
+#   dt <- fread(fin)
+#   
+#   # filter tracks that have less than 10 steps
+#   dt <- dt[, n_steps := .N, by = file][n_steps >= n_fltr]
+#   
+#   if(nrow(dt) == 0){ return(NULL) }
+#   
+#   dt[, yd := day_cycle_to_yd(day_cycle_1)]
+#   # extract sensor
+#   dt[, sensor := sub(".*dep_(.*?)_sen.*", "\\1", file)][
+#     , sensor := fcase(sensor == 653, "gps", sensor == 2299894820, "sigfox")]
+#   
+#   n_deploy_tot <- dt[, uniqueN(file)]
+#   
+#   # get track lengths and sensor
+#   dt_per_file <- dt[, .(
+#     n_days = uniqueN(day_cycle_1),
+#     n_year_days = uniqueN(yd), 
+#     sensor = unique(sensor), 
+#     n_steps = unique(n_steps)
+#   ), by = file]
+#   
+#   # remove duplicated trakcs - deployments with both gps and sigfox
+#   dt_per_file[, track_id := sub("_dep_\\d+.*$", "", basename(file))]
+#   
+#   setorder(dt_per_file, sensor)
+#   
+#   dt_per_file[, duplicated_track := duplicated(track_id)]
+#   dpltrks <- dt_per_file[duplicated_track == T, file]
+#   
+#   dt_per_file <- dt_per_file[duplicated_track == F]
+#   dt <- dt[!file %in% dpltrks]
+#   
+#   cls <- c("n_days", "n_year_days")
+#   
+#   n_steps_tot <- sum(dt_per_file$n_steps)
+#   
+#   # extract stats for tracking times
+#   dt_per_file <- dt_per_file[, c(
+#     as.list(setNames(lapply(.SD, median), paste0("median_", cls))),
+#     as.list(setNames(lapply(.SD, function(x) {
+#       if(n_deploy_tot == 1) NA else paste(range(x), collapse = " - ") }),
+#       paste0("range_", cls))),
+#     N_gps = sum(sensor == "gps"),
+#     N_sigfox = sum(sensor == "sigfox"), 
+#     Shennon_n_steps = -sum(n_steps/n_steps_tot * log10(n_steps/n_steps_tot))
+#   ), .SDcols = cls]
+#   
+#   dt[, yd := day_cycle_to_yd(day_cycle_1)]
+#   # extract sensor
+#   dt[, sensor := sub(".*dep_(.*?)_sen.*", "\\1", file)]
+#   
+#   
+#   if(dist_col == "sl_median"){ 
+#     setnames(dt, old = "sl_median", new = "sl_median_old")
+#     # when there was only one distance available no stats was calculated
+#     dt[, sl_median := fifelse(
+#       sl_n_steps == 1, as.numeric(sl_), as.numeric(sl_median_old))] 
+#   }
+#   
+#   dt_out <- dt[, c(
+#     species = gsub(".*/Studies/(.*?)_(.*?)/6_distances.*", "\\1 \\2", fin),
+#     N_steps = .N, 
+#     N_days = uniqueN(day_cycle_1),
+#     N_year_days = uniqueN(yd),
+#     N_deployments = uniqueN(file), 
+#     sl_mean = mean(get(dist_col)),
+#     as.list(setNames(
+#       round(quantile(
+#         get(dist_col), probs = c(0.05, 0.25, 0.5, 0.75, 0.95)), 2), 
+#       paste0("sl_", c("05", "25", "50", "75", "95")))), 
+#     continents = paste(unique(continent), collapse = ", "), 
+#     sensors = paste(unique(sensor), collapse = ", ")
+#   )]
+#   
+#   cbind(dt_out, dt_per_file)
+#   
+# }), fill = T)
+# 
+# 
+# files <- list.files(data_dir, pattern = "6_overview.*\\.csv", full.names = T)
+# 
+# dt_overview <- fread(
+#   list.files(
+#     data_dir, 
+#     pattern = ".*filter_30_max_active_steps.*continent.csv", 
+#     full.names = T)
+# )
+# n_fltr <- 30
+# 
+# target_sp <- dt_overview[, species]
+# 
+# 
+# disp_fit_dir <- file.path(data_dir, "Disp_fits")
+# dir.create(disp_fit_dir, showWarnings = F)
 
 # Fit dispersal -----------------------------------------------------------
 
-dt_overview <- fread(
-  list.files(
-    data_dir, 
-    pattern = ".*filter_30_max_active_steps.*continent.csv", 
-    full.names = T)
-)
-n_fltr <- 30
+# never complated
+# 
+# dt_overview <- fread(
+#   list.files(
+#     data_dir, 
+#     pattern = ".*filter_30_max_active_steps.*continent.csv", 
+#     full.names = T)
+# )
+# n_fltr <- 30
+# 
+# target_sp <- dt_overview[, species]
+# rm(dt_overview)
+# 
+# dist_dirs <- file.path(study_dir, gsub(" ", "_", target_sp), "6_distances")
+# files <- list.files(
+#   dist_dirs, ".*max_active.*nauticalDawn.*continent.rds", full.names = T)
+# rm(target_sp)
+# 
+# dt_steps <- rbindlist(lapply(seq_along(files), function(i){
+#   
+#   fin <- files[i]
+#   sp <- gsub(".*Studies/(.*)_(.*)/6_distances/.*", "\\1 \\2", fin)
+#   
+#   dt <- fread(fin)
+#   
+#   # filter tracks that have less than 10 steps
+#   dt <- dt[, n_steps := .N, by = file][n_steps >= n_fltr]
+#   
+#   # extract sensor
+#   dt[, sensor := sub(".*dep_(.*?)_sen.*", "\\1", file)][
+#     , sensor := fcase(sensor == 653, "gps", sensor == 2299894820, "sigfox")]
+#   
+#   # get track lengths and sensor
+#   dt_per_file <- dt[, .(sensor = unique(sensor)), by = file]
+#   
+#   # remove duplicated trakcs - deployments with both gps and sigfox
+#   dt_per_file[, track_id := sub("_dep_\\d+.*$", "", basename(file))]
+#   
+#   setorder(dt_per_file, sensor)
+#   
+#   dt_per_file[, duplicated_track := duplicated(track_id)]
+#   dpltrks <- dt_per_file[duplicated_track == T, file]
+#   rm(dt_per_file)
+#   
+#   dt <- dt[, .(file, sl_, day_cycle_1)]
+#   
+#   dt[, .(
+#     mean_sl = mean(sl_),
+#     median_sl = median(sl_),
+#     sd_sl = sd(sl_),
+#     cv_sl = sd(sl_)/mean(sl_),
+#     IQR_sl = IQR(sl_), 
+#     skewness_sl = e1071::skewness(sl_), 
+#     kurtosis_sl = e1071::kurtosis(sl_), 
+#     unimodal = ifelse(diptest::dip.test(sl_)$p.value < 0.05, 0, 1), 
+#     mode_kde = {
+#       dens <- density(sl_, na.rm=TRUE)
+#       dens$x[which.max(dens$y)]
+#     },
+#     n_steps = .N, 
+#     skewness_sl_log = e1071::skewness(log10(sl_)), 
+#     kurtosis_sl_log = e1071::kurtosis(log10(sl_)), 
+#     unimodal_log = ifelse(diptest::dip.test(sl_)$p.value < 0.05, 0, 1), 
+#     mode_kde_log = density(log10(sl_))$x[which.max(dens$y)]
+#   )][, species = sp]
+# 
+# }))
+# 
 
-target_sp <- dt_overview[, species]
-rm(dt_overview)
-
-dist_dirs <- file.path(study_dir, gsub(" ", "_", target_sp), "6_distances")
-files <- list.files(
-  dist_dirs, ".*max_active.*nauticalDawn.*continent.rds", full.names = T)
-rm(target_sp)
-
-dt_steps <- rbindlist(lapply(seq_along(files), function(i){
-  
-  fin <- files[i]
-  sp <- gsub(".*Studies/(.*)_(.*)/6_distances/.*", "\\1 \\2", fin)
-  
-  dt <- fread(fin)
-  
-  # filter tracks that have less than 10 steps
-  dt <- dt[, n_steps := .N, by = file][n_steps >= n_fltr]
-  
-  # extract sensor
-  dt[, sensor := sub(".*dep_(.*?)_sen.*", "\\1", file)][
-    , sensor := fcase(sensor == 653, "gps", sensor == 2299894820, "sigfox")]
-  
-  # get track lengths and sensor
-  dt_per_file <- dt[, .(sensor = unique(sensor)), by = file]
-  
-  # remove duplicated trakcs - deployments with both gps and sigfox
-  dt_per_file[, track_id := sub("_dep_\\d+.*$", "", basename(file))]
-  
-  setorder(dt_per_file, sensor)
-  
-  dt_per_file[, duplicated_track := duplicated(track_id)]
-  dpltrks <- dt_per_file[duplicated_track == T, file]
-  rm(dt_per_file)
-  
-  dt <- dt[, .(file, sl_, day_cycle_1)]
-  
-  dt[, .(
-    mean_sl = mean(sl_),
-    median_sl = median(sl_),
-    sd_sl = sd(sl_),
-    cv_sl = sd(sl_)/mean(sl_),
-    IQR_sl = IQR(sl_), 
-    skewness_sl = e1071::skewness(sl_), 
-    kurtosis_sl = e1071::kurtosis(sl_), 
-    unimodal = ifelse(diptest::dip.test(sl_)$p.value < 0.05, 0, 1), 
-    mode_kde = {
-      dens <- density(sl_, na.rm=TRUE)
-      dens$x[which.max(dens$y)]
-    },
-    n_steps = .N, 
-    skewness_sl_log = e1071::skewness(log10(sl_)), 
-    kurtosis_sl_log = e1071::kurtosis(log10(sl_)), 
-    unimodal_log = ifelse(diptest::dip.test(sl_)$p.value < 0.05, 0, 1), 
-    mode_kde_log = density(log10(sl_))$x[which.max(dens$y)]
-  )][, species = sp]
-
-}))
 
 
+
+# Compare with Fandos -----------------------------------------------------
+
+# fin <- "6_overview_filter_30_max_active_steps_nauticalDawn_nauticalDusk_continent_sl_median.csv"
+# 
+# 
+# dt <- fread(file.path(data_dir, fin))
+# 
+# fandos_dt <- fread(here::here(
+#   "Published_data", "Fandos2023_Table_S14_ species_dispersal_distances_v1_0_2.csv"))
+# 
+# fandos_dt <- rename_to_birdlife(fandos_dt, "species")
+# 
+# 
+# fandos_dt <- fandos_dt[
+#   birdlife_name %in% dt$species, .(median, birdlife_name, function_id)]
+# fandos_avr <- fandos_dt[
+#   , .(sl_50_avr = mean(median, na.rm = TRUE)), by = birdlife_name]
+# 
+# 
+# merged_dt <- merge(fandos_avr, dt, by.x = "birdlife_name", by.y = "species")
+# 
+# merged_dt[, order_txt := paste0(order, " [", .N, "]"), by = order]
+# 
+# matched_idx <- match(names(ord_col), merged_dt$order)
+# names(ord_col) <- merged_dt$order_txt[matched_idx]
+# 
+# 
+# merged_dt |> 
+#   ggplot() +
+#   geom_point(
+#     aes(x = sl_50_avr, y = sl_50/1000, color = order_txt), size = 3, alpha = 0.5
+#   ) + 
+#   ggrepel::geom_text_repel(
+#     aes(x = sl_50_avr, y = sl_50/1000, label = birdlife_name), size = 3
+#   ) +
+#   scale_color_manual(values = ord_col) +
+#   theme_bw() + 
+#   scale_y_log10() + 
+#   scale_x_log10() + 
+#   labs(
+#     x = "Fandos et al. (2023) median dispersal distance [km]",
+#     y = "Median daily movement [km]", 
+#     color = "order [number of species]", 
+#     title = "Comparison of median daily movement estimates with Fandos et al. (2023) dispersal distances",
+#     subtitle = "dispersal distances were represented by mean over median estimates for all models"
+#   ) 
+# 
+# 
+# ggsave(
+#   filename = file.path(graphs_dir, "6_median_sl_compare_Fandos2023.png"),
+#   width = 10, height = 6
+# )
 
 
 

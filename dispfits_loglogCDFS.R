@@ -4,7 +4,7 @@
 library(stats)
 library(pracma)  # for numeric integration
 # using library ehaGoF for goodness of fit
-library(ehaGoF)
+#library(ehaGoF)
 
 library(dplyr)
 library(tidyr)
@@ -106,16 +106,22 @@ cdf_2dt_analytic <- function(r, a, b) {1 - (1 + (r / a)^2)^(1 - b)}
 ##DATA PROCESSING SPECIES AND MODELS SELECTION
 ###########################################################################
 
-df<-read.csv("/home/fbartu/Research/Nina_Bogdanovic/Dispersal_Kernels/2026/6_distance_fit_overview.csv",header=TRUE)
+df<-read.csv(
+  here::here("Data", "6_distance_fit_overview_sl_median.csv"),header=TRUE)
 error_table <- df %>% select(species,fitted_function,error_occurred) 
 # View the resulting table
 #print(error_table)
 
-folder_path <- "~/Research/Nina_Bogdanovic/Dispersal_Kernels/2026/Disp_fits"
+folder_path <- "/home/nina/R_projects/WNV_dispersal/Data/6_distance_fit/Sl_median"
+
+plots_path <- gsub("Sl_median", "Sl_median_PLOTS", folder_path)
+dir.create(plots_path, showWarnings = FALSE)
+
 rds_files <- list.files(folder_path, pattern = "\\.rds$", full.names = TRUE)
 
 # --- Loop over each file ---
-for (file_path in rds_files) {
+#for (file_path in rds_files) {
+out_dt <- lapply(rds_files, function(file_path){
   
   # Extract species name from file name
   species_name <- tools::file_path_sans_ext(basename(file_path))
@@ -130,6 +136,8 @@ for (file_path in rds_files) {
   
   # ---Read the fitted models ---
   f <- readRDS(file_path)
+  
+  pname <- file.path(plots_path, gsub(".rds", "_FEDE.png", basename(file_path)))
  
 #SELECTING SPECIES  
 single_species <- error_table %>% filter(species == species_name)
@@ -214,6 +222,8 @@ rrmse_results <- sapply(models_to_use, function(mod) {
 # --- 4 Prepare legend labels with RRMSE ---
 legend_labels <- paste0(models_to_use, " (RRMSE=", round(rrmse_results, 3), ")")
 
+png(filename = pname, width = 800, height = 600)
+
 # --- 5 Plot log-log exceedance probability dynamically ---
 plot(xx, yy, type = "p", lwd = 2, col = "black",
      xlab = "log10(r)", ylab = "log10(P(R>=r))",
@@ -227,64 +237,75 @@ for (i in seq_along(models_to_use)) {
 
 legend("bottomleft", legend = legend_labels, col = colors[models_to_use], lwd = 2)
 
+# 
+# readline(prompt = "Press [Enter] to histogram plot...")
+# 
+# ###### PLOTTING BASED ON HISTOGRAM AND PDF #####################
+# 
+# # --- 1 Prepare histogram ---
+# hist(data, probability = TRUE, breaks = 100, border = NA,
+#      xlab = "r", main = paste0(species_name, ": Histogram of sampled r with theoretical PDFs"))
+# 
+# # --- 2 Prepare grid for PDFs ---
+# r_grid <- seq(0, max(data) * 0.99, length.out = 1000)
+# 
+# # --- 3️ Colors ---
+# n_models <- length(models_to_use)
+# colors <- brewer.pal(min(8, n_models), "Set1")
+# names(colors) <- models_to_use
+# 
+# # --- 4 Define which PDFs need radial correction ---
+# radial_corrected <- c("general normal", "2Dt", "geometric", "weibull", "gamma")
+# 
+# # --- 5 Overlay PDFs dynamically ---
+# for (i in seq_along(models_to_use)) {
+#   mod <- models_to_use[i]
+#   
+#   # Get PDF function
+#   
+#     pdf_fun <- switch(mod,
+#               `general normal` = pdf_generalized_normal,
+#               `2Dt`= pdf_2dt,
+#                geometric = pdf_geometric,
+#                lognormal = pdf_lognormal,
+#                weibull = pdf_weibull,
+#                gamma = pdf_gamma)
+#   
+#     
+#   # Get parameters
+#   a <- params[[mod]]$a
+#   b <- params[[mod]]$b
+#   
+#   # Apply radial correction if needed
+#   y_vals <- if (mod %in% radial_corrected) {
+#     2 * pi * r_grid * pdf_fun(r_grid, a = a, b = b)
+#   } else {
+#     pdf_fun(r_grid, a = a, b = b)
+#   }
+#   
+#   lines(r_grid, y_vals, col = colors[mod], lwd = 2, lty = 2)
+# }
+# 
+# # --- 6 Optional: Add RRMSE to legend ---
+# legend_labels <- paste0(models_to_use, 
+#                         if(exists("rrmse_results")) paste0(" (RRMSE=", round(rrmse_results[models_to_use], 3), ")") else "")
+# legend("topright", legend = legend_labels, col = colors[models_to_use], lwd = 2, lty = 2)
 
-readline(prompt = "Press [Enter] to histogram plot...")
 
-###### PLOTTING BASED ON HISTOGRAM AND PDF #####################
+# readline(prompt = "Press [Enter] to continue to next species...")
 
-# --- 1 Prepare histogram ---
-hist(data, probability = TRUE, breaks = 100, border = NA,
-     xlab = "r", main = paste0(species_name, ": Histogram of sampled r with theoretical PDFs"))
+dev.off()
 
-# --- 2 Prepare grid for PDFs ---
-r_grid <- seq(0, max(data) * 0.99, length.out = 1000)
+saveRDS(cdf_table, file = gsub(".png", "_CDF_table.rds", pname))
 
-# --- 3️ Colors ---
-n_models <- length(models_to_use)
-colors <- brewer.pal(min(8, n_models), "Set1")
-names(colors) <- models_to_use
+return(data.table::data.table(
+  result = rrmse_results, func = names(rrmse_results), 
+  species := species_name))
 
-# --- 4 Define which PDFs need radial correction ---
-radial_corrected <- c("general normal", "2Dt", "geometric", "weibull", "gamma")
+}) #if loop is used!
 
-# --- 5 Overlay PDFs dynamically ---
-for (i in seq_along(models_to_use)) {
-  mod <- models_to_use[i]
-  
-  # Get PDF function
-  
-    pdf_fun <- switch(mod,
-              `general normal` = pdf_generalized_normal,
-              `2Dt`= pdf_2dt,
-               geometric = pdf_geometric,
-               lognormal = pdf_lognormal,
-               weibull = pdf_weibull,
-               gamma = pdf_gamma)
-  
-    
-  # Get parameters
-  a <- params[[mod]]$a
-  b <- params[[mod]]$b
-  
-  # Apply radial correction if needed
-  y_vals <- if (mod %in% radial_corrected) {
-    2 * pi * r_grid * pdf_fun(r_grid, a = a, b = b)
-  } else {
-    pdf_fun(r_grid, a = a, b = b)
-  }
-  
-  lines(r_grid, y_vals, col = colors[mod], lwd = 2, lty = 2)
-}
+fwrite(rbindlist(out_dt, fill = T), here::here("Data", "FEDE_LOGLOG.rds"))
 
-# --- 6 Optional: Add RRMSE to legend ---
-legend_labels <- paste0(models_to_use, 
-                        if(exists("rrmse_results")) paste0(" (RRMSE=", round(rrmse_results[models_to_use], 3), ")") else "")
-legend("topright", legend = legend_labels, col = colors[models_to_use], lwd = 2, lty = 2)
-
-
-readline(prompt = "Press [Enter] to continue to next species...")
-
-} #if loop is used!
 
 
 ################## OLD, NON-DYNAMIC CODE #######################333
