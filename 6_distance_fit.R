@@ -12,33 +12,13 @@ graphs_dir <- file.path(data_dir, "Graphs")
 plot_dir <- file.path(graphs_dir, "6_distance_fit")
 dir.create(plot_dir, showWarnings = F)
 
+dist_dirs <- file.path(list.files(study_dir, full.names = T), "6_distances")
 
-files <- list.files(data_dir, pattern = "6_overview.*\\.csv", full.names = T)
-
-dt_overview <- fread(
-  list.files(
-    data_dir, 
-    pattern = ".*filter_30_max_active_steps.*continent.csv", 
-    full.names = T)
-  )
-
-n_fltr <- 30
-
-target_sp <- dt_overview[, species]
-
-
-fit_dir <- file.path(data_dir, "6_distance_fit")
-dir.create(fit_dir, showWarnings = F)
 
 # 1 - Fit dispersal -----------------------------------------------------------
 
-median_dir <- file.path(fit_dir, "Sl_median")
-dir.create(median_dir, showWarnings = F)
-
-fin_name <- "4_all_tracks_max_active_steps_nauticalDawn_nauticalDusk_continent.rds"
-
-dist_dirs <- file.path(study_dir, gsub(" ", "_", target_sp), "6_distances")
-files <- file.path(dist_dirs, fin_name)
+files <- list.files(
+  dist_dirs, pattern = "_fltr_20_dist_50m.rds", full.names = T)
 
 files_out <- gsub(".rds", "_sl_median_fit.rds", files)
 files <- files[!file.exists(files_out)]
@@ -75,157 +55,31 @@ if(lfl > 0){
     
     dt <- fread(fin)
     
-    # filter tracks that have less than 10 steps
-    dt <- dt[, n_steps := .N, by = file][n_steps >= n_fltr]
-    
-    if(nrow(dt) == 0){ return(NULL) }
-    
-    setnames(dt, old = "sl_median", new = "sl_median_old")
-    # when there was only one distance available no stats was calculated
-    dt[, sl_median := fifelse(
-      sl_n_steps == 1, as.numeric(sl_), as.numeric(sl_median_old))] 
-    
-    # extract sensor
-    dt[, sensor := sub(".*dep_(.*?)_sen.*", "\\1", file)][
-      , sensor := fcase(sensor == 653, "gps", sensor == 2299894820, "sigfox")]
-    
-    # get track lengths and sensor
-    dt_per_file <- dt[, .(sensor = unique(sensor)), by = file]
-    
-    # remove duplicated trakcs - deployments with both gps and sigfox
-    dt_per_file[, track_id := sub("_dep_\\d+.*$", "", basename(file))]
-    
-    setorder(dt_per_file, sensor)
-    
-    dt_per_file[, duplicated_track := duplicated(track_id)]
-    dpltrks <- dt_per_file[duplicated_track == T, file]
-    rm(dt_per_file)
-    
-    dt <- dt[!file %in% dpltrks][sl_median > 0]
-    
     # run safely dispersal kernel function for each distribution separately
     # the output is a list with dist_funs as names
     kernels <- dist_funs |> 
       map(~safe_dispersal_kernel(dt$sl_median, distribution = .x)) |> 
       set_names(dist_funs) 
     
-    saveRDS(kernels, file.path(median_dir, paste0(sp, "_sl_median_fit.rds")))
     
+    fout <- gsub(".rds", "_sl_median_fit.rds", fin)
+    
+    saveRDS(kernels, fout)
+    
+    cat("\n", i, " | ", lfl, " - ", sp, " DONE!")
     
   })
   
 }
 
 
-
-
-# Warning messages:
-#   1: In ks.test.default(data, simul.rayleigh) :
-#   p-value will be approximate in the presence of ties
-# 2: In ks.test.default(data, simul.exponential) :
-#   p-value will be approximate in the presence of ties
-# 3: In ks.test.default(data, simul.generalnormal) :
-#   p-value will be approximate in the presence of ties
-# 4: In ks.test.default(data, simul.2dt) :
-#   p-value will be approximate in the presence of ties
-# 5: In ks.test.default(data, simul.geometric) :
-#   p-value will be approximate in the presence of ties
-# 6: In ks.test.default(data, simul.lognorm) :
-#   p-value will be approximate in the presence of ties
-# 7: In ks.test.default(data, simul.wald) :
-#   p-value will be approximate in the presence of ties
-# 8: In ks.test.default(data, simul.weibull) :
-#   p-value will be approximate in the presence of ties
-# 9: In ks.test.default(data, simul.gamma) :
-#   p-value will be approximate in the presence of ties
-# 10: In sqrt(diag(solve(numDeriv::hessian(logdistfun, x = init.pars$par,  ... :
-# NaNs produced
-# 11: In sqrt(diag(solve(numDeriv::hessian(logdistfun, x = init.pars$par,  ... :
-# NaNs produced
-# 12: In confint.dispfit(dist.opt, log.dist.2dt, data = data,  ... :
-# twodt: Upper CI for 'a' is not accurate, I've given up after 10000 trials.
-# 13: In confint.dispfit(dist.opt, log.dist.2dt, data = data,  ... :
-#   twodt: Upper CI for 'b' is not accurate, I've given up after 10000 trials.
-# 14: In confint.dispfit(dist.opt, log.dist.geometric, data = data,  ... :
-# geometric: Upper CI for 'a' is not accurate, I've given up after 10000 trials.
-# 15: In ks.test.default(data, simul.rayleigh) :
-#   p-value will be approximate in the presence of ties
-# 16: In ks.test.default(data, simul.exponential) :
-#   p-value will be approximate in the presence of ties
-# 17: In ks.test.default(data, simul.generalnormal) :
-#   p-value will be approximate in the presence of ties
-# 18: In ks.test.default(data, simul.2dt) :
-#   p-value will be approximate in the presence of ties
-# 19: In ks.test.default(data, simul.geometric) :
-#   p-value will be approximate in the presence of ties
-# 20: In ks.test.default(data, simul.lognorm) :
-#   p-value will be approximate in the presence of ties
-# 21: In ks.test.default(data, simul.wald) :
-#   p-value will be approximate in the presence of ties
-# 22: In ks.test.default(data, simul.weibull) :
-#   p-value will be approximate in the presence of ties
-# 23: In ks.test.default(data, simul.gamma) :
-#   p-value will be approximate in the presence of ties
-# 24: In sqrt(diag(solve(numDeriv::hessian(logdistfun, x = init.pars$par,  ... :
-#   NaNs produced
-# 25: In sqrt(diag(solve(numDeriv::hessian(logdistfun, x = init.pars$par,  ... :
-#   NaNs produced
-# 26: In optimize(function(par) fn(par, ...)/con$fnscale, lower = lower,  ... :
-#   Inf replaced by maximum positive value
-# 27: In ks.test.default(data, simul.rayleigh) :
-#   p-value will be approximate in the presence of ties
-# 28: In ks.test.default(data, simul.exponential) :
-#   p-value will be approximate in the presence of ties
-# 29: In ks.test.default(data, simul.generalnormal) :
-#   p-value will be approximate in the presence of ties
-# 30: In ks.test.default(data, simul.2dt) :
-#   p-value will be approximate in the presence of ties
-# 31: In ks.test.default(data, simul.geometric) :
-#   p-value will be approximate in the presence of ties
-# 32: In ks.test.default(data, simul.lognorm) :
-#   p-value will be approximate in the presence of ties
-# 33: In ks.test.default(data, simul.wald) :
-#   p-value will be approximate in the presence of ties
-# 34: In ks.test.default(data, simul.weibull) :
-#   p-value will be approximate in the presence of ties
-# 35: In ks.test.default(data, simul.gamma) :
-#   p-value will be approximate in the presence of ties
-# 36: In optimize(function(par) fn(par, ...)/con$fnscale, lower = lower,  ... :
-#   Inf replaced by maximum positive value
-# 37: In ks.test.default(data, simul.rayleigh) :
-#   p-value will be approximate in the presence of ties
-# 38: In ks.test.default(data, simul.exponential) :
-#   p-value will be approximate in the presence of ties
-# 39: In ks.test.default(data, simul.generalnormal) :
-#   p-value will be approximate in the presence of ties
-# 40: In ks.test.default(data, simul.2dt) :
-#   p-value will be approximate in the presence of ties
-# 41: In ks.test.default(data, simul.geometric) :
-#   p-value will be approximate in the presence of ties
-# 42: In ks.test.default(data, simul.lognorm) :
-#   p-value will be approximate in the presence of ties
-# 43: In ks.test.default(data, simul.wald) :
-#   p-value will be approximate in the presence of ties
-# 44: In ks.test.default(data, simul.weibull) :
-#   p-value will be approximate in the presence of ties
-# 45: In ks.test.default(data, simul.gamma) :
-#   p-value will be approximate in the presence of ties
-# 46: In sqrt(diag(solve(numDeriv::hessian(logdistfun, x = init.pars$par,  ... :
-#   NaNs produced
-# 47: In sqrt(diag(solve(numDeriv::hessian(logdistfun, x = init.pars$par,  ... :
-#   NaNs produced
-# 48: In confint.dispfit(dist.opt, log.dist.gamma, data = data,  ... :
-#   gamma: Parameter 'a' likely diverged, skipping CI calculation
-# 49: In sqrt(diag(new.covar)) : NaNs produced
-# 50: In sqrt(diag(new.covar)) : NaNs produced
-
 # 3 - All fits overview---------------------------------------------------------
 
 fout <- "6_distance_fit_overview_sl_median.csv"
 
-file_fits <- list.files(median_dir, full.names = T)
-
 if(!file.exists(file.path(data_dir, fout))){
+  
+  file_fits <- list.files(dist_dirs,  "_sl_median_fit.rds", full.names = T)
   
   # extract values from each fit
   fits_overview <- rbindlist(lapply(seq_along(file_fits), function(i){
